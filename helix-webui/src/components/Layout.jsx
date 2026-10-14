@@ -118,17 +118,27 @@ export default function Layout() {
     company_logo_data_url: "",
   });
 
-  const mainLinks = [
-    { to: "/", label: t("nav.analysis"), icon: BarChart3, end: true },
-    { to: "/results", label: t("nav.results"), icon: Play },
-    { to: "/canvas", label: t("nav.canvas"), icon: LayoutTemplate },
-    { to: "/rules", label: t("nav.rules"), icon: Scale },
-    { to: "/skills", label: t("nav.skills"), icon: Sparkles },
-    { to: "/agents", label: t("nav.agents"), icon: Bot },
-    { to: "/docs", label: t("nav.tableDocs"), icon: Table2 },
-    { to: "/rag", label: t("nav.rag"), icon: Brain },
-    { to: "/mcp", label: t("nav.mcp"), icon: Plug },
-    { to: "/db-explorer", label: t("nav.dbExplorer"), icon: Database },
+  const navGroups = [
+    {
+      labelKey: "nav.groups.analyze",
+      links: [
+        { to: "/", label: t("nav.analysis"), icon: BarChart3, end: true },
+        { to: "/results", label: t("nav.results"), icon: Play },
+        { to: "/canvas", label: t("nav.canvas"), icon: LayoutTemplate },
+        { to: "/docs", label: t("nav.tableDocs"), icon: Table2 },
+        { to: "/db-explorer", label: t("nav.dbExplorer"), icon: Database },
+      ],
+    },
+    {
+      labelKey: "nav.groups.configure",
+      links: [
+        { to: "/rules", label: t("nav.rules"), icon: Scale },
+        { to: "/skills", label: t("nav.skills"), icon: Sparkles },
+        { to: "/agents", label: t("nav.agents"), icon: Bot },
+        { to: "/rag", label: t("nav.rag"), icon: Brain },
+        { to: "/mcp", label: t("nav.mcp"), icon: Plug },
+      ],
+    },
   ];
 
   const footerLinks = [
@@ -232,8 +242,17 @@ export default function Layout() {
           ) : null}
         </div>
 
-        {mainLinks.map((link) => (
-          <NavItem key={link.to} link={link} />
+        {navGroups.map((group) => (
+          <details key={group.labelKey} className="group" open>
+            <summary className="cursor-pointer select-none rounded-lg px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted hover:bg-fog">
+              {t(group.labelKey)}
+            </summary>
+            <div className="mt-1 flex flex-col gap-1 ps-2">
+              {group.links.map((link) => (
+                <NavItem key={link.to} link={link} />
+              ))}
+            </div>
+          </details>
         ))}
 
         <div className="mt-auto space-y-1 pt-2">

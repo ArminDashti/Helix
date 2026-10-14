@@ -55,6 +55,9 @@ const EMPTY_DB = {
 
 const SSL_MODES = ["disable", "prefer", "require", "verify-ca", "verify-full"];
 
+// Display-only stand-in for a saved API key; the real key never leaves the API host.
+const SAVED_API_KEY_MASK = "*".repeat(20);
+
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
 const EMPTY_OPENROUTER = {
@@ -233,7 +236,7 @@ function StatusLogsSection() {
   };
 
   const services = [
-    { id: "llm", label: t("layout.status.llm") },
+    { id: "llm", label: t("settings.tabLlm") },
     { id: "engine", label: t("layout.status.engine") },
     { id: "database", label: t("layout.status.database") },
   ];
@@ -411,16 +414,12 @@ export default function SettingsPage() {
         : [{ value: provider, label: connectorLabel(t, { id: provider }) }],
     [connectors, provider, t],
   );
-  const showsBaseUrl = activeConnector
-    ? activeConnector.asks_base_url !== false
-    : !isCursorCli;
-  const showsWorkspace = activeConnector
-    ? activeConnector.asks_workspace !== false
-    : true;
+  // Only the OpenAI-compatible connector lets the admin edit its endpoint.
+  const showsBaseUrl = provider === "openai_compatible";
   const showsApiKey = activeConnector
     ? activeConnector.api_key_required !== false
     : !isCursorCli;
-  // A connector that owns its endpoint shows it read-only instead of asking for it.
+  // Every other connector shows its fixed endpoint read-only.
   const managedBaseUrl = showsBaseUrl ? "" : activeConnector?.base_url || "";
 
   async function reloadSampleTiers() {
@@ -1061,27 +1060,6 @@ export default function SettingsPage() {
             </>
           ) : null}
 
-          {showsWorkspace ? (
-            <>
-              <Field label={t("settings.workspace")} id="llm_workspace">
-                <input
-                  id="llm_workspace"
-                  value={orForm.workspace || ""}
-                  onChange={(e) => updateOrField("workspace", e.target.value)}
-                  className={inputClass}
-                  placeholder={t("settings.workspacePlaceholder")}
-                  spellCheck={false}
-                  required={isCursorCli}
-                />
-              </Field>
-              <p className="text-xs text-muted">
-                {isCursorCli
-                  ? t("settings.workspaceHintCursorCli")
-                  : t("settings.workspaceHint")}
-              </p>
-            </>
-          ) : null}
-
           {showsApiKey ? (
             <>
               <Field label={t("settings.apiKey")} id="llm_token">
@@ -1089,14 +1067,10 @@ export default function SettingsPage() {
                   id="llm_token"
                   type="password"
                   autoComplete="off"
-                  value={orForm.token || ""}
-                  onChange={(e) => updateOrField("token", e.target.value)}
+                  value={orForm.token || (activeTokenConfigured ? SAVED_API_KEY_MASK : "")}
+                  onChange={(e) => updateOrField("token", e.target.value.replaceAll("*", ""))}
                   className={inputClass}
-                  placeholder={
-                    activeTokenConfigured
-                      ? t("settings.apiKeySavedPlaceholder")
-                      : t("settings.apiKeyPastePlaceholder")
-                  }
+                  placeholder={t("settings.apiKeyPastePlaceholder")}
                   spellCheck={false}
                 />
               </Field>
@@ -1105,20 +1079,6 @@ export default function SettingsPage() {
                   ? t("settings.apiKeySavedHint")
                   : t("settings.apiKeyPasteHint")}
               </p>
-              {activeConnector?.key_url ? (
-                <p className="text-xs">
-                  <a
-                    href={activeConnector.key_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-moss underline decoration-line underline-offset-2 hover:text-ink"
-                  >
-                    {t("settings.getApiKey", {
-                      connector: connectorLabel(t, activeConnector),
-                    })}
-                  </a>
-                </p>
-              ) : null}
             </>
           ) : null}
 

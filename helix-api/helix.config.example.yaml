@@ -3,7 +3,8 @@
 #
 # Paste the API key in Settings > LLM. One key is enough for every connector.
 # Keys are stored as openrouter.token (never returned by the API).
-# provider: opencode_go | openrouter | openai_compatible | cursor_headless_cli
+# provider: openai | anthropic | opencode_go | opencode_zen | openrouter | openai_compatible | cursor_headless_cli
+# - openai / anthropic / opencode_zen: vendor endpoint is fixed; key only.
 # - opencode_go: OpenCode Go subscription; the app supplies the endpoint
 #   (https://opencode.ai/zen/go/v1) and the plan's model catalog — key only.
 # - openrouter / openai_compatible: OpenAI-compatible chat via openrouter.base_url

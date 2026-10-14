@@ -28,19 +28,15 @@ services:
   helix-webui:
     build:
       context: ../helix-webui
-      dockerfile: dockerfile
+      dockerfile: dockerfile.npx
       args:
-        VITE_BASE_PATH: /helix/
+        VITE_BASE_PATH: /
+        VITE_API_BASE_URL: http://127.0.0.1:8173
     image: helix-webui:npx
     container_name: helix-npx-webui
     restart: unless-stopped
-    environment:
-      API_HOST: helix-api
-      API_PORT: "8000"
     ports:
       - "${HELIX_WEBUI_PORT:-8181}:80"
-    depends_on:
-      - helix-api
 
 volumes:
   helix-sqlite-data:

@@ -756,6 +756,16 @@ class LlmSettingsTests(SimpleTestCase):
         self.assertTrue(connectors["opencode_go"]["api_key_required"])
         self.assertNotIn("token", connectors["opencode_go"])
 
+    def test_connector_catalog_includes_openai_anthropic_and_opencode_zen(self):
+        connectors = {entry["id"]: entry for entry in get_connectors()}
+        self.assertEqual(connectors["openai"]["base_url"], "https://api.openai.com/v1")
+        self.assertEqual(connectors["anthropic"]["base_url"], "https://api.anthropic.com/v1")
+        self.assertEqual(connectors["opencode_zen"]["base_url"], "https://opencode.ai/zen/v1")
+        for connector_id in ("openai", "anthropic", "opencode_zen"):
+            self.assertFalse(connectors[connector_id]["asks_base_url"])
+            self.assertTrue(connectors[connector_id]["api_key_required"])
+            self.assertNotIn("token", connectors[connector_id])
+
     def test_provider_settings_expose_the_connector_catalog(self):
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "helix.config.yaml"
