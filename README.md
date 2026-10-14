@@ -7,7 +7,8 @@ LLM-powered SELECT-only warehouse analytics — Django API and React Web UI.
 Requires [Docker](https://docs.docker.com/get-docker/) and Node.js 18+.
 
 ```bash
-npx @armindashti/helix up
+helix run                # build and start detached (Web UI on 8181)
+helix run --port=9000    # Web UI on a custom host port (1024-65535)
 ```
 
 - Web UI: http://127.0.0.1:8181/helix/
@@ -16,9 +17,14 @@ npx @armindashti/helix up
 On first run the CLI creates `~/.helix/helix.config.yaml` from the example template. Set `OPENROUTER_TOKEN` in your environment or add a provider key in **Settings** after sign-in.
 
 ```bash
-npx @armindashti/helix doctor   # Docker + compose sanity check
-npx @armindashti/helix down      # stop containers (data volume kept)
-npx @armindashti/helix logs      # follow logs
+helix help
+helix version
+helix status                 # Docker check, container state, endpoint health
+helix service status
+helix service start [--port=N]
+helix service stop           # keeps data volume
+helix service restart
+helix update                 # rebuild images and recreate containers (keeps data)
 ```
 
 ### Publish to npm

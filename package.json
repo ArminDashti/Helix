@@ -1,7 +1,7 @@
-﻿{
+{
     "name":  "@armindashti/helix",
     "version":  "1.0.0",
-    "description":  "Helix â€” LLM warehouse analytics (API + Web UI) via Docker",
+    "description":  "Helix — LLM warehouse analytics (API + Web UI) via Docker",
     "license":  "MIT",
     "author":  "Armin Dashti",
     "type":  "module",
