@@ -68,7 +68,7 @@ services:
       - ../helix-webui:/app
       - helix-webui-node-modules:/app/node_modules
     ports:
-      - "5178:80"
+      - "${HELIX_PORT:-5178}:80"
     depends_on:
       - api
     networks:

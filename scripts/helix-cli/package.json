@@ -1,0 +1,13 @@
+{
+  "name": "helix-cli",
+  "version": "1.0.0",
+  "private": true,
+  "description": "helix: lifecycle CLI for the local Docker stack (helix-api + helix-webui)",
+  "type": "module",
+  "bin": {
+    "helix": "./helix.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
