@@ -1,14 +1,14 @@
 # Local Docker hot-reload: SQLite Django + Vite WebUI (bind mounts).
 # Usage: ..\scripts\install-local-docker.ps1
 #   or: docker compose -f docker-compose.local.yml -p helix up -d --build
-name: helix-local
+name: helix
 services:
   api:
     build:
       context: .
       dockerfile: dockerfile
     image: helix-api:local-dev
-    container_name: cursor-helix-api-api
+    container_name: helix-api
     restart: unless-stopped
     working_dir: /app
     environment:
@@ -49,7 +49,7 @@ services:
 
   webui:
     image: node:22-alpine
-    container_name: cursor-helix-webui
+    container_name: helix-webui
     restart: unless-stopped
     working_dir: /app
     environment:

@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $ComposeFile = Join-Path $RepoRoot 'helix-api\docker-compose.local.yml'
 $ComposeDir = Split-Path -Parent $ComposeFile
-$ProjectName = 'helix-local'
+$ProjectName = 'helix'
 $Images = @(
     'helix-api:local-dev'
 )
@@ -21,9 +21,10 @@ $Volumes = @(
     'helix-webui-node-modules'
 )
 $Containers = @(
-    'cursor-helix-api-api',
-    'cursor-helix-webui',
-    'helix-webui',  # legacy local-dev name
+    'helix-api',
+    'helix-webui',
+    'cursor-helix-api-api',  # legacy local-dev name
+    'cursor-helix-webui',  # legacy local-dev name
     'helix-postgres'
 )
 

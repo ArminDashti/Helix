@@ -9,12 +9,12 @@ $ErrorActionPreference = 'Stop'
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $ComposeFile = Join-Path $RepoRoot 'helix-api\docker-compose.local.yml'
-$ProjectName = 'helix-local'
+$ProjectName = 'helix'
 $ComposeDir = Split-Path -Parent $ComposeFile
 # Only containers owned by this local-dev stack (never touch prod helix-api / helix-webui).
 $StackContainers = @(
-    'cursor-helix-api-api',
-    'cursor-helix-webui'
+    'helix-api',
+    'helix-webui'
 )
 
 if (-not (Test-Path -LiteralPath $ComposeFile)) {
@@ -59,7 +59,7 @@ try {
     }
     # Recreate containers only - never pass -v (SQLite + caches stay).
     foreach ($name in $StackContainers) {
-        docker rm -f $name 2>$null | Out-Null
+        cmd /c "docker rm -f $name >nul 2>&1"
     }
     docker compose -p $ProjectName -f $ComposeFile up -d --build --force-recreate --remove-orphans
     if ($LASTEXITCODE -ne 0) {
@@ -76,5 +76,5 @@ Write-Host '  Web UI : http://127.0.0.1:5178/helix/'
 Write-Host '  API    : http://127.0.0.1:8173'
 Write-Host '  SQLite : volume helix-sqlite-data (/app/backend/data)'
 Write-Host '  Gateway: http://helix.local/  and  http://pc-armin/helix/'
-Write-Host '  Containers: cursor-helix-api-api, cursor-helix-webui'
+Write-Host '  Containers: helix-api, helix-webui'
 Write-Host '  Hot reload: edit helix-api / helix-webui on host - no reinstall needed.'

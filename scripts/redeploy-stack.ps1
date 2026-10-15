@@ -204,11 +204,11 @@ try {
     Clear-DeadLocalProxyEnv
 
     if ($Local) {
-        $ProjectName = 'helix-local'
+        $ProjectName = 'helix'
         $ComposeFile = Join-Path $RepoRoot 'helix-api\docker-compose.local.yml'
         $ComposeDir = Split-Path -Parent $ComposeFile
         $DataVolumes = @('helix-sqlite-data', 'helix-pip-cache', 'helix-webui-node-modules')
-        $Containers = @('cursor-helix-api-api', 'cursor-helix-webui')
+        $Containers = @('helix-api', 'helix-webui')
 
         Warn-StaleVolumes -Expected $DataVolumes -SuspiciousPatterns @(
             'helix*sqlite*',
@@ -247,7 +247,7 @@ try {
         Write-Host '  Gateway    : http://helix.local/  and  http://pc-armin/helix/'
         Write-Host "  Containers : $($Containers -join ', ')"
         Write-Host "  Volumes    : $($DataVolumes -join ', ') $(if ($RemoveVolume) { '(recreated)' } else { '(preserved)' })"
-        Write-Host '  Project    : helix-local'
+        Write-Host '  Project    : helix'
         exit 0
     }
 
