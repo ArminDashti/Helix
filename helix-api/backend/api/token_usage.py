@@ -1,8 +1,8 @@
 """Token accounting for LLM calls and for stored knowledge (RAG) documents.
 
 Providers report ``usage`` on chat completions, so a run's real token cost is normally available
-straight from the response. Connectors that do not report it (the Cursor headless CLI) fall back
-to an estimate, so every run still publishes a comparable number.
+straight from the response. Connectors that do not report it fall back to an estimate, so every
+run still publishes a comparable number.
 
 The estimator is deliberately dependency-free: no tokenizer package is installed in the image and
 a per-provider BPE download at request time is not acceptable. GPT-style BPE averages ~4 ASCII

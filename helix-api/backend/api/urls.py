@@ -57,5 +57,7 @@ urlpatterns = [
     path("runs/<str:run_id>/answer", views.runs_answer, name="runs-answer"),
     path("chat", views.chat, name="chat"),
     path("state-version/", views.state_version, name="state-version"),
+    path("app/update/", views.app_update, name="app-update"),
+    path("app/feedback/", views.app_feedback, name="app-feedback"),
     path("events/stream", views.events_stream, name="events-stream"),
 ]

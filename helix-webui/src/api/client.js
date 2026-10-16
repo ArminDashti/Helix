@@ -353,6 +353,18 @@ export async function saveProvider(provider) {
   });
 }
 
+export async function fetchLatestRelease() {
+  return requestJson("/api/app/update/");
+}
+
+export async function sendFeedback(payload) {
+  return requestJson("/api/app/feedback/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function fetchBranding() {
   return requestJson("/api/admin/branding/");
 }

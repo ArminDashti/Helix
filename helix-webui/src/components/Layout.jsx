@@ -100,6 +100,16 @@ export default function Layout() {
   const { health, checking } = useApiStatus();
   const { t } = useI18n();
   const [theme, setTheme] = useState(readThemePreference);
+  const [online, setOnline] = useState(() => navigator.onLine);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
   const [branding, setBranding] = useState({
     company_name: "",
     company_logo_data_url: "",
@@ -169,6 +179,11 @@ export default function Layout() {
 
   return (
     <div className="flex h-dvh overflow-hidden">
+      {!online && (
+        <div role="status" className="fixed inset-x-0 top-0 z-50 bg-warn px-3 py-1 text-center text-sm font-medium text-paper">
+          {t("layout.offline")}
+        </div>
+      )}
       <nav
         className="flex w-[20%] min-w-[10rem] max-w-[14rem] shrink-0 flex-col gap-1 border-e border-line/80 bg-paper/60 px-2 py-2 sm:px-3"
         aria-label={t("layout.navAria")}

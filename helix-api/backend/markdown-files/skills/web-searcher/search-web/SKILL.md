@@ -1,10 +1,10 @@
 ---
-name: Search web
+name: search-web
 description: Synthesize public web search hits into a cited brief for the calling
   agent
 ---
 
-# Search web
+# search-web
 
 Disabled in this build (`disabled_agents: [web-searcher]`). These steps apply when it is re-enabled.
 

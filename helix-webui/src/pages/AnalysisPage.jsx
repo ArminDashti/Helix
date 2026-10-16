@@ -21,7 +21,7 @@ import { translateKnownMessage } from "../i18n/apiErrors.js";
 import { readStoredLocale } from "../i18n/applyLocale.js";
 import { translate } from "../i18n/messages.js";
 import { agentCompanyLabel } from "../utils/agentLabel.js";
-import { textDirection, textLang } from "../utils/textDirection.js";
+import { parseColumns, textDirection, textLang } from "../utils/textDirection.js";
 import { sortByLabel } from "../utils/sortOptions.js";
 
 const selectClass =
@@ -50,6 +50,10 @@ function needsChart(mode) {
   return mode === "chart";
 }
 
+function needsColumns(mode) {
+  return mode === "grid";
+}
+
 function llmUnavailableMessage(health, t) {
   if (!health) {
     return t("analysis.llmUnreachable");
@@ -67,8 +71,10 @@ export default function AnalysisPage() {
     translate(readStoredLocale(), "analysis.promptDefault"),
   );
   const [mode, setMode] = useState("chart");
+  const [outputLanguage, setOutputLanguage] = useState(locale);
   const [reportType, setReportType] = useState("medium");
   const [chartTypesSelected, setChartTypesSelected] = useState(["bar"]);
+  const [gridColumns, setGridColumns] = useState("");
   const [error, setError] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [running, setRunning] = useState(false);
@@ -95,6 +101,14 @@ export default function AnalysisPage() {
         locale,
       ),
     [t, locale],
+  );
+
+  const outputLanguages = useMemo(
+    () => [
+      { value: "en", label: t("analysis.outputLanguageEn") },
+      { value: "fa", label: t("analysis.outputLanguageFa") },
+    ],
+    [t],
   );
 
   const researchLevels = useMemo(
@@ -165,7 +179,7 @@ export default function AnalysisPage() {
     setRunMessages([]);
     setRunMeta({
       mode,
-      language: locale,
+      language: outputLanguage,
       report_type: needsType(mode) ? reportType : undefined,
       chart_type: needsChart(mode) ? chartTypesSelected[0] : undefined,
       chart_types: needsChart(mode) ? chartTypesSelected.slice(0, 4) : undefined,
@@ -187,10 +201,11 @@ export default function AnalysisPage() {
     const payload = {
       prompt: trimmed,
       mode,
-      language: locale,
+      language: outputLanguage,
       report_type: needsType(mode) ? reportType : undefined,
       chart_type: selectedCharts?.[0],
       chart_types: selectedCharts,
+      columns: needsColumns(mode) ? parseColumns(gridColumns) : undefined,
     };
 
     const controller = new AbortController();
@@ -222,7 +237,7 @@ export default function AnalysisPage() {
       await createResult({
         prompt: trimmed,
         mode,
-        language: locale,
+        language: outputLanguage,
         payload: final,
         duration_s: durationS,
       });
@@ -369,6 +384,24 @@ export default function AnalysisPage() {
             </select>
           </div>
 
+          <div className="min-w-[8.5rem] shrink-0">
+            <label htmlFor="output_language" className="block text-sm font-medium text-ink">
+              {t("analysis.outputLanguage")}
+            </label>
+            <select
+              id="output_language"
+              value={outputLanguage}
+              onChange={(e) => setOutputLanguage(e.target.value)}
+              className={selectClass}
+            >
+              {outputLanguages.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {needsType(mode) ? (
             <div className="min-w-[8.5rem] shrink-0">
               <label
@@ -428,6 +461,26 @@ export default function AnalysisPage() {
                   );
                 })}
               </div>
+            </div>
+          ) : null}
+
+          {needsColumns(mode) ? (
+            <div className="min-w-[12rem] flex-1">
+              <label htmlFor="grid_columns" className="block text-sm font-medium text-ink">
+                {t("analysis.columns")}
+              </label>
+              <input
+                id="grid_columns"
+                type="text"
+                value={gridColumns}
+                onChange={(e) => setGridColumns(e.target.value)}
+                placeholder={t("analysis.columnsPlaceholder")}
+                aria-describedby="grid_columns_hint"
+                className={selectClass}
+              />
+              <p id="grid_columns_hint" className="mt-1 text-xs text-muted">
+                {t("analysis.columnsHint")}
+              </p>
             </div>
           ) : null}
 

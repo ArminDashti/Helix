@@ -17,8 +17,6 @@ const API_DIR = path.join(REPO, 'helix-api');
 const COMPOSE_FILE = path.join(API_DIR, 'docker-compose.local.yml');
 const APP_DIR = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), '.config'), 'helix');
 const CONFIG_FILE = path.join(APP_DIR, 'config.json');
-const CURSOR_AUTH = path.join(process.env.APPDATA || '', 'Cursor', 'auth.json');
-
 const PROJECT = 'helix';
 const CONTAINERS = ['helix-api', 'helix-webui'];
 const VOLUMES = ['helix-sqlite-data', 'helix-pip-cache', 'helix-webui-node-modules'];
@@ -292,9 +290,6 @@ async function cmdRebuild(cfg, flags) {
   const removeData = flags.removeData ?? 'no';
   if (!['no', 'yes'].includes(removeData)) fail('--remove-data must be no or yes', EXIT.usage);
   requireDocker();
-  if (!fs.existsSync(CURSOR_AUTH)) {
-    fail(`Cursor IDE auth.json not found at ${CURSOR_AUTH}. Sign in to Cursor IDE first.`);
-  }
   const wipe = removeData === 'yes';
   if (wipe) {
     await confirm(

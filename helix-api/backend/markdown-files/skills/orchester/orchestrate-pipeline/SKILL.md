@@ -1,9 +1,9 @@
 ---
-name: Orchestrate pipeline
+name: orchestrate-pipeline
 description: Route guardian â†’ researcher â†’ final-approver and package the UI payload
 ---
 
-# Orchestrate pipeline
+# orchestrate-pipeline
 
 1. Read each node's `{sender, status, message}` and the run context.
 2. Hop in order: guardian pass â†’ researcher; researcher done â†’ final-approver; final-approver pass â†’ package.

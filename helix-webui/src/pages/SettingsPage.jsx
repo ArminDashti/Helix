@@ -1,20 +1,36 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, Navigate, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  useOutletContext,
+  useSearchParams,
+} from "react-router-dom";
 import {
   Activity,
   BookOpen,
   Building2,
   Database,
   Download,
+  Monitor,
+  MessageSquare,
+  Moon,
   RefreshCw,
   Save,
+  ScrollText,
   Settings as SettingsIcon,
+  Sun,
+  User,
 } from "lucide-react";
+import { version as appVersion } from "../../package.json";
+import AboutMePage from "./AboutMePage.jsx";
+import LogsPage from "./LogsPage.jsx";
 import {
   fetchAgents,
   fetchBranding,
   fetchDatabaseSettings,
+  fetchLatestRelease,
   fetchOpenRouterModels,
+  sendFeedback,
   fetchOpenRouterSettings,
   fetchProviderSettings,
   fetchSampleTiers,
@@ -60,13 +76,8 @@ const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const EMPTY_OPENROUTER = {
   token: "",
   base_url: OPENROUTER_BASE_URL,
-  // No vendor model constant here: the API fills this from the active connector on load, and a
-  // stale default would be what gets saved back if that load ever failed.
-  default_model: "",
   agents: {},
   token_configured: false,
-  workspace: "",
-  mode: "",
 };
 
 const LLM_AGENT_IDS = [
@@ -83,7 +94,6 @@ const CONNECTOR_LABEL_KEYS = {
   openrouter: "settings.apiOpenrouter",
   opencode_go: "settings.apiOpencodeGo",
   openai_compatible: "settings.apiOpenaiCompatible",
-  cursor_headless_cli: "settings.apiCursorHeadlessCli",
 };
 
 function connectorLabel(t, connector) {
@@ -107,11 +117,6 @@ function seedConnectorFields(prev, nextConnector, prevConnector) {
 
   const nextModel = (nextConnector?.default_model || "").trim();
   const prevModel = (prevConnector?.default_model || "").trim();
-  const currentModel = (prev.default_model || "").trim();
-  const defaultModel =
-    nextModel && (!currentModel || currentModel === prevModel || currentModel === nextModel)
-      ? nextModel
-      : currentModel || prevModel;
 
   const agents = {};
   for (const [agentId, entry] of Object.entries(prev.agents || {})) {
@@ -121,7 +126,7 @@ function seedConnectorFields(prev, nextConnector, prevConnector) {
     agents[agentId] = adoptNext ? { ...entry, model: nextModel } : { ...entry };
   }
 
-  return { ...prev, base_url: baseUrl, default_model: defaultModel, agents };
+  return { ...prev, base_url: baseUrl, agents };
 }
 
 const ADMIN_GUIDE_PDF = assetUrl("docs/fa/helix-admin-guide.pdf");
@@ -154,12 +159,17 @@ const EMPTY_BRANDING = {
   company_logo_data_url: "",
 };
 
+const THEME_OPTIONS = [
+  { value: "light", labelKey: "layout.theme.light", icon: Sun },
+  { value: "dark", labelKey: "layout.theme.dark", icon: Moon },
+  { value: "system", labelKey: "layout.theme.system", icon: Monitor },
+];
+
 const TAB_ALIASES = {
   provider: "llm",
   openrouter: "llm",
   sql: "database",
   connection: "llm",
-  logs: "status",
 };
 
 function engineLabel(t, value) {
@@ -186,11 +196,182 @@ function tabIcon(tabId) {
   if (tabId === "general") return Building2;
   if (tabId === "database") return Database;
   if (tabId === "status") return Activity;
+  if (tabId === "update") return Download;
+  if (tabId === "feedback") return MessageSquare;
+  if (tabId === "logs") return ScrollText;
+  if (tabId === "about") return User;
   return SettingsIcon;
 }
 
 function isConnectedStatus(status) {
   return status === "connected" || status === "configured";
+}
+
+function UpdateSection() {
+  const { t } = useI18n();
+  const [release, setRelease] = useState(null);
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function checkForUpdates() {
+    setChecking(true);
+    setError(null);
+    try {
+      setRelease(await fetchLatestRelease());
+    } catch (err) {
+      setError(failMessage(err, t, "common.failedToLoad"));
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  const updateAvailable =
+    Boolean(release?.latest_version) && release.latest_version !== appVersion;
+
+  return (
+    <section className="space-y-3 rounded-2xl border border-line/80 bg-paper/80 p-4 backdrop-blur-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
+            {t("settings.tabUpdate")}
+          </h2>
+          <p className="mt-1 text-sm text-muted">{t("settings.updateIntro")}</p>
+        </div>
+        <IconButton
+          type="button"
+          icon={RefreshCw}
+          onClick={checkForUpdates}
+          disabled={checking}
+          className="rounded-xl border border-line bg-fog/40 px-3 py-2 text-sm font-medium text-ink hover:bg-fog disabled:opacity-50"
+        >
+          {checking ? t("settings.checkingUpdates") : t("settings.checkUpdates")}
+        </IconButton>
+      </div>
+      <p className="text-sm text-ink">
+        {t("settings.currentVersion")}: {appVersion}
+      </p>
+      {release ? (
+        <div className="space-y-1 text-sm text-ink">
+          <p>
+            {t("settings.latestVersion")}: {release.latest_version || "—"}
+          </p>
+          <p className="text-muted">
+            {updateAvailable
+              ? t("settings.updateAvailable", { version: release.latest_version })
+              : t("settings.upToDate")}
+          </p>
+          {release.release_url ? (
+            <a
+              href={release.release_url}
+              target="_blank"
+              rel="noreferrer"
+              className="underline decoration-line underline-offset-2 hover:text-ink"
+            >
+              {t("settings.viewRelease")}
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+      {error ? (
+        <p className="text-sm text-warn" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function FeedbackSection() {
+  const { t } = useI18n();
+  const [message, setMessage] = useState("");
+  const [email, setEmail] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+  const [issueUrl, setIssueUrl] = useState(null);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    if (!message.trim()) {
+      setError(t("settings.feedbackEmpty"));
+      return;
+    }
+    setSending(true);
+    setError(null);
+    setIssueUrl(null);
+    try {
+      const saved = await sendFeedback({
+        message: message.trim(),
+        email: email.trim(),
+      });
+      setMessage("");
+      setEmail("");
+      setIssueUrl(saved.issue_url);
+    } catch (err) {
+      setError(failMessage(err, t, "common.saveFailed"));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-3 rounded-2xl border border-line/80 bg-paper/80 p-4 backdrop-blur-sm"
+    >
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
+        {t("settings.tabFeedback")}
+      </h2>
+      <p className="text-sm text-muted">{t("settings.feedbackIntro")}</p>
+      <Field label={t("settings.feedbackMessage")} id="feedback_message">
+        <textarea
+          id="feedback_message"
+          rows={5}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          className={inputClass}
+          placeholder={t("settings.feedbackMessagePlaceholder")}
+        />
+      </Field>
+      <Field label={t("settings.feedbackEmail")} id="feedback_email">
+        <input
+          id="feedback_email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className={inputClass}
+          placeholder={t("settings.feedbackEmailPlaceholder")}
+        />
+      </Field>
+      {error ? (
+        <p className="text-sm text-warn" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {issueUrl ? (
+        <p className="text-sm text-ink">
+          {t("settings.feedbackSent")}{" "}
+          <a
+            href={issueUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="underline decoration-line underline-offset-2 hover:text-ink"
+          >
+            {t("settings.viewIssue")}
+          </a>
+        </p>
+      ) : null}
+      <div className="flex justify-end pt-1">
+        <IconButton
+          type="submit"
+          icon={MessageSquare}
+          disabled={sending}
+          className="rounded-xl bg-moss px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+        >
+          {sending ? t("settings.feedbackSending") : t("settings.feedbackSend")}
+        </IconButton>
+      </div>
+    </form>
+  );
 }
 
 function StatusLogsSection() {
@@ -247,7 +428,7 @@ function StatusLogsSection() {
           </h2>
           <p className="mt-1 text-sm text-muted">{t("settings.statusIntro")}</p>
           <p className="mt-1 text-sm text-muted">
-            <Link to="/logs" className="underline decoration-line underline-offset-2 hover:text-ink">
+            <Link to="/settings?tab=logs" className="underline decoration-line underline-offset-2 hover:text-ink">
               {t("settings.statusLogsLink")}
             </Link>
           </p>
@@ -326,7 +507,8 @@ function StatusLogsSection() {
 }
 
 export default function SettingsPage() {
-  const { t, locale } = useI18n();
+  const { t, locale, setLocale } = useI18n();
+  const { theme, setTheme } = useOutletContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
   const requestedTab = TAB_ALIASES[tabParam] || tabParam;
@@ -337,6 +519,10 @@ export default function SettingsPage() {
       { id: "llm", label: t("settings.tabLlm") },
       { id: "database", label: t("settings.tabDatabase") },
       { id: "status", label: t("settings.tabStatus") },
+      { id: "update", label: t("settings.tabUpdate") },
+      { id: "feedback", label: t("settings.tabFeedback") },
+      { id: "logs", label: t("nav.logs") },
+      { id: "about", label: t("nav.aboutMe") },
     ],
     [t],
   );
@@ -385,10 +571,7 @@ export default function SettingsPage() {
   const { checkConnection } = useApiStatus();
 
   const activeTokenConfigured = Boolean(orForm.token_configured);
-  const isCursorCli = provider === "cursor_headless_cli";
-  const llmReady = isCursorCli
-    ? Boolean((orForm.workspace || "").trim())
-    : activeTokenConfigured;
+  const llmReady = activeTokenConfigured;
 
   const connectorById = useMemo(() => {
     const map = {};
@@ -413,13 +596,10 @@ export default function SettingsPage() {
   );
   const showsBaseUrl = activeConnector
     ? activeConnector.asks_base_url !== false
-    : !isCursorCli;
-  const showsWorkspace = activeConnector
-    ? activeConnector.asks_workspace !== false
     : true;
   const showsApiKey = activeConnector
     ? activeConnector.api_key_required !== false
-    : !isCursorCli;
+    : true;
   // A connector that owns its endpoint shows it read-only instead of asking for it.
   const managedBaseUrl = showsBaseUrl ? "" : activeConnector?.base_url || "";
 
@@ -768,10 +948,7 @@ export default function SettingsPage() {
     setStatus(null);
     try {
       const payload = {
-        default_model: orForm.default_model,
         agents: orForm.agents,
-        workspace: (orForm.workspace || "").trim(),
-        mode: "agent",
       };
       if (showsApiKey && orForm.token?.trim()) {
         payload.token = orForm.token.trim();
@@ -788,7 +965,7 @@ export default function SettingsPage() {
       setOrForm({ ...EMPTY_OPENROUTER, ...data.openrouter, token: "" });
       setStatus(t("settings.llmSaved"));
       checkConnection({ silent: true });
-      if (isCursorCli || data.openrouter?.token_configured) {
+      if (data.openrouter?.token_configured) {
         await refreshModels({ tokenConfigured: true });
       }
     } catch (err) {
@@ -799,13 +976,7 @@ export default function SettingsPage() {
   async function refreshModels({
     tokenConfigured = llmReady,
   } = {}) {
-    if (!tokenConfigured && !(orForm.token || "").trim() && !isCursorCli) {
-      setModels([]);
-      setModelsError(null);
-      setModelsLoading(false);
-      return;
-    }
-    if (isCursorCli && !(orForm.workspace || "").trim()) {
+    if (!tokenConfigured && !(orForm.token || "").trim()) {
       setModels([]);
       setModelsError(null);
       setModelsLoading(false);
@@ -867,7 +1038,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 w-full flex-col overflow-hidden">
       <PageHeader icon={SettingsIcon} title={t("settings.title")} />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
       <aside className="flex shrink-0 flex-col gap-2 border-b border-line/80 bg-paper/50 p-2 md:w-1/4 md:min-w-[10rem] md:max-w-[16rem] md:border-b-0 md:border-e">
@@ -918,6 +1089,71 @@ export default function SettingsPage() {
       {activeSection === "general" ? (
         <div className="space-y-3">
           <AdminGuideDownloadCard t={t} />
+        <section className="space-y-3 rounded-2xl border border-line/80 bg-paper/80 p-4 backdrop-blur-sm">
+          <div>
+            <p className="block text-sm font-medium text-ink">{t("layout.languageAria")}</p>
+            <div
+              className="mt-1 flex flex-row gap-1 rounded-xl border border-line/80 bg-fog/40 p-1"
+              role="group"
+              aria-label={t("layout.languageAria")}
+            >
+              {[
+                { value: "en", label: t("layout.languageEn") },
+                { value: "fa", label: t("layout.languageFa") },
+              ].map((opt) => {
+                const active = locale === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setLocale(opt.value)}
+                    title={opt.label}
+                    aria-label={opt.label}
+                    aria-pressed={active}
+                    className={[
+                      "flex flex-1 items-center justify-center rounded-lg py-1.5 text-xs font-semibold transition",
+                      "px-2",
+                      active ? "bg-moss text-white" : "text-ink hover:bg-fog",
+                    ].join(" ")}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <p className="block text-sm font-medium text-ink">{t("layout.themeAria")}</p>
+            <div
+              className="mt-1 flex flex-row gap-1 rounded-xl border border-line/80 bg-fog/40 p-1"
+              role="group"
+              aria-label={t("layout.themeAria")}
+            >
+              {THEME_OPTIONS.map((opt) => {
+                const Icon = opt.icon;
+                const active = theme === opt.value;
+                const label = t(opt.labelKey);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setTheme(opt.value)}
+                    title={label}
+                    aria-label={label}
+                    aria-pressed={active}
+                    className={[
+                      "flex flex-1 items-center justify-center rounded-lg py-1.5 transition",
+                      "px-2",
+                      active ? "bg-moss text-white" : "text-ink hover:bg-fog",
+                    ].join(" ")}
+                  >
+                    <Icon className="size-4" aria-hidden="true" />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
         <form
           onSubmit={handleSaveGeneral}
           className="space-y-3 rounded-2xl border border-line/80 bg-paper/80 p-4 backdrop-blur-sm"
@@ -992,6 +1228,10 @@ export default function SettingsPage() {
       ) : null}
 
       {activeSection === "status" ? <StatusLogsSection /> : null}
+      {activeSection === "update" ? <UpdateSection /> : null}
+      {activeSection === "feedback" ? <FeedbackSection /> : null}
+      {activeSection === "logs" ? <LogsPage /> : null}
+      {activeSection === "about" ? <AboutMePage /> : null}
 
       {activeSection === "llm" ? (
         <>
@@ -1061,27 +1301,6 @@ export default function SettingsPage() {
             </>
           ) : null}
 
-          {showsWorkspace ? (
-            <>
-              <Field label={t("settings.workspace")} id="llm_workspace">
-                <input
-                  id="llm_workspace"
-                  value={orForm.workspace || ""}
-                  onChange={(e) => updateOrField("workspace", e.target.value)}
-                  className={inputClass}
-                  placeholder={t("settings.workspacePlaceholder")}
-                  spellCheck={false}
-                  required={isCursorCli}
-                />
-              </Field>
-              <p className="text-xs text-muted">
-                {isCursorCli
-                  ? t("settings.workspaceHintCursorCli")
-                  : t("settings.workspaceHint")}
-              </p>
-            </>
-          ) : null}
-
           {showsApiKey ? (
             <>
               <Field label={t("settings.apiKey")} id="llm_token">
@@ -1130,20 +1349,9 @@ export default function SettingsPage() {
             </p>
           ) : null}
 
-          <Field label={t("settings.defaultModel")} id="default_model">
-            <ModelCombobox
-              id="default_model"
-              value={orForm.default_model}
-              onChange={(v) => updateOrField("default_model", v)}
-              models={models}
-              loading={modelsLoading}
-              placeholder={modelPlaceholder}
-            />
-          </Field>
-
           <div>
             <h3 className="mb-2 text-sm font-medium text-ink">{t("settings.perAgent")}</h3>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-5">
               {agentIds.map((agentId) => (
                 <Field
                   key={agentId}
@@ -1152,7 +1360,7 @@ export default function SettingsPage() {
                 >
                   <ModelCombobox
                     id={`agent-${agentId}`}
-                    value={orForm.agents?.[agentId]?.model || orForm.default_model || ""}
+                    value={orForm.agents?.[agentId]?.model || ""}
                     onChange={(v) => updateAgentModel(agentId, v)}
                     models={models}
                     loading={modelsLoading}
@@ -1174,7 +1382,6 @@ export default function SettingsPage() {
         <div className="mt-3">
           <LlmChatTester
             models={models}
-            defaultModel={orForm.default_model}
             orForm={orForm}
           />
         </div>

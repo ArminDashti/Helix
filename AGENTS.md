@@ -52,7 +52,6 @@ Full rules: LEAN-CTX.md (open on demand — do not auto-load).
 
 ## Learned User Preferences
 
-- Cursor headless CLI (`cursor_headless_cli` / `agent -p`) must always run in Agent mode — never ask or plan.
 - When asked to remove a feature, delete all of its code, files, routes, and i18n keys completely; leave no dead code.
 
 ## Learned Workspace Facts

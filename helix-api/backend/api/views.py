@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
@@ -17,6 +18,7 @@ from . import docs_catalog
 from . import logs_store
 from . import mcp_config
 from . import results_store
+from . import support
 from .config_loader import (
     create_custom_agent,
     database_to_connection_string,
@@ -52,7 +54,7 @@ from .pipeline_graph import (
     reset_pipeline_bundle,
     update_pipeline_bundle,
 )
-from .llm_client import is_usable_workspace, require_llm
+from .llm_client import require_llm
 from . import org
 from .pipeline_run import pipeline_events, resume_pipeline_events, run_pipeline_sync
 
@@ -160,22 +162,7 @@ def health(request: HttpRequest) -> JsonResponse:
             }
 
     provider = get_provider()
-    if provider == "cursor_headless_cli":
-        workspace = str(get_openrouter_settings().get("workspace") or "").strip()
-        if not workspace:
-            llm = {"status": "not_configured", "detail": "Workspace path is not set"}
-        elif not is_usable_workspace(workspace):
-            llm = {
-                "status": "disconnected",
-                "detail": f"Workspace must be an absolute host machine folder: {workspace}",
-            }
-        else:
-            llm = {"status": "configured", "detail": ""}
-        openrouter = {
-            "status": "configured" if workspace else "not_configured",
-            "detail": "" if workspace else "Workspace path is not set",
-        }
-    elif not get_openrouter_token():
+    if not get_openrouter_token():
         openrouter = {
             "status": "missing_token",
             "detail": "API key is not set",
@@ -536,7 +523,7 @@ def admin_openrouter_chat_test(request: HttpRequest) -> JsonResponse:
     except ValueError as exc:
         msg = str(exc)
         # map auth/config to 400, upstream to 502
-        if "is not set" in msg or "Base URL" in msg or "API key" in msg or "Workspace" in msg or "Cursor agent" in msg:
+        if "is not set" in msg or "Base URL" in msg or "API key" in msg:
             return _error(msg, status=400)
         if "timed out" in msg.lower():
             return _error(msg, status=504)
@@ -1442,6 +1429,31 @@ def state_version(request: HttpRequest) -> JsonResponse:
 
 
 @csrf_exempt
+@require_http_methods(["GET"])
+def app_update(request: HttpRequest) -> JsonResponse:
+    try:
+        return JsonResponse(support.get_latest_release())
+    except (urllib.error.URLError, ValueError) as exc:
+        return _error(f"Could not check for updates: {exc}", status=502)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def app_feedback(request: HttpRequest) -> JsonResponse:
+    body = _json_body(request)
+    message = str(body.get("message", "")).strip()
+    email = str(body.get("email", "")).strip()
+    if not message:
+        return _error("Feedback message is required.")
+    if len(message) > 5000:
+        return _error("Feedback message must be 5000 characters or fewer.")
+    try:
+        issue_url = support.create_feedback_issue(message, email)
+    except (urllib.error.URLError, ValueError) as exc:
+        return _error(f"Could not send feedback: {exc}", status=502)
+    return JsonResponse({"issue_url": issue_url}, status=201)
+
+
 @require_http_methods(["GET"])
 def events_stream(request: HttpRequest) -> StreamingHttpResponse:
     """SSE stream pushing state version every ~1.5s; frontend uses EventSource with polling fallback."""

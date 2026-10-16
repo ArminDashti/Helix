@@ -3,25 +3,20 @@
 #
 # Paste the API key in Settings > LLM. One key is enough for every connector.
 # Keys are stored as openrouter.token (never returned by the API).
-# provider: opencode_go | openrouter | openai_compatible | cursor_headless_cli
+# provider: opencode_go | openrouter | openai_compatible
 # - opencode_go: OpenCode Go subscription; the app supplies the endpoint
 #   (https://opencode.ai/zen/go/v1) and the plan's model catalog — key only.
 # - openrouter / openai_compatible: OpenAI-compatible chat via openrouter.base_url
 # openrouter.base_url defaults to the connector's own endpoint.
-# For Cursor OpenAI proxies (chat/completions), set openrouter.workspace to an
-# absolute host path; mode is always agent (ask/plan are rejected/coerced).
 provider: openrouter
 
 # Models are suggestions only — use any model ids your host accepts.
-# Runtime resolves: openrouter.agents.<id>.model, else openrouter.default_model.
+# Runtime resolves: openrouter.agents.<id>.model, else the connector's default model.
 
 openrouter:
   token_env: OPENROUTER_TOKEN
   base_url: "https://openrouter.ai/api/v1"
   app_name: "Helix"
-  default_model: "composer-2.5"
-  # workspace: "C:/path/to/project"  # required by some Cursor OpenAI proxies
-  # mode: agent  # only agent is allowed; ask/plan coerce to agent
   # Per chat/completions call; pipeline agents can exceed 90s with large prompts.
   timeout_seconds: 600
   agents:

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plug, Power, Server } from "lucide-react";
+import { Plug, Power, Server, Trash2, Upload } from "lucide-react";
 import {
   configureSqlServerMcp,
+  deleteMcp,
   fetchMcps,
+  importMcps,
   toggleMcp,
 } from "../api/client.js";
 import IconButton from "../components/IconButton.jsx";
@@ -11,6 +13,7 @@ import { useI18n } from "../context/I18nContext.jsx";
 import { failMessage } from "../i18n/apiErrors.js";
 
 const SQL_BUSY = "__sql__";
+const IMPORT_BUSY = "__import__";
 
 export default function McpPage() {
   const { t } = useI18n();
@@ -19,6 +22,7 @@ export default function McpPage() {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [busy, setBusy] = useState("");
+  const [importText, setImportText] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -45,6 +49,45 @@ export default function McpPage() {
       setData(next);
     } catch (err) {
       setError(failMessage(err, t, "mcp.toggleFailed"));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function handleImport() {
+    setBusy(IMPORT_BUSY);
+    setError(null);
+    setNotice(null);
+    let config;
+    try {
+      config = JSON.parse(importText);
+    } catch {
+      setError(t("mcp.invalidJson"));
+      setBusy("");
+      return;
+    }
+    try {
+      const next = await importMcps(config);
+      setData(next);
+      setImportText("");
+      setNotice(t("mcp.imported"));
+    } catch (err) {
+      setError(failMessage(err, t, "mcp.importFailed"));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function handleDelete(server) {
+    if (!window.confirm(t("mcp.deleteConfirm", { name: server.name }))) return;
+    setBusy(server.name);
+    setError(null);
+    setNotice(null);
+    try {
+      const next = await deleteMcp(server.name);
+      setData(next);
+    } catch (err) {
+      setError(failMessage(err, t, "mcp.deleteFailed"));
     } finally {
       setBusy("");
     }
@@ -133,6 +176,29 @@ export default function McpPage() {
         ) : null}
       </section>
 
+      <section className="shrink-0 rounded-2xl border border-line/80 bg-paper/80 p-4">
+        <h2 className="text-sm font-semibold text-ink">{t("mcp.importTitle")}</h2>
+        <p className="mt-1 text-xs text-muted">{t("mcp.importDesc")}</p>
+        <textarea
+          value={importText}
+          onChange={(e) => setImportText(e.target.value)}
+          rows={5}
+          dir="ltr"
+          spellCheck={false}
+          placeholder={'{\n  "mcpServers": {\n    "name": { "command": "npx", "args": [] }\n  }\n}'}
+          className="mt-2 w-full rounded-xl border border-line bg-fog/40 p-2 font-mono text-xs text-ink"
+        />
+        <IconButton
+          type="button"
+          icon={Upload}
+          disabled={busy === IMPORT_BUSY || !data?.exists || !importText.trim()}
+          onClick={handleImport}
+          className="mt-2 h-10 rounded-xl bg-moss px-4 text-sm font-semibold text-white hover:bg-moss-deep disabled:opacity-50"
+        >
+          {busy === IMPORT_BUSY ? t("mcp.importing") : t("mcp.import")}
+        </IconButton>
+      </section>
+
       <section className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto rounded-2xl border border-line/80 bg-paper/80 p-4">
         <h2 className="shrink-0 text-sm font-semibold text-ink">
           {t("mcp.listTitle")}
@@ -189,6 +255,15 @@ export default function McpPage() {
                     : server.enabled
                       ? t("mcp.disable")
                       : t("mcp.enable")}
+                </IconButton>
+                <IconButton
+                  type="button"
+                  icon={Trash2}
+                  disabled={busy === server.name || !data?.exists}
+                  onClick={() => handleDelete(server)}
+                  className="h-10 shrink-0 rounded-xl border border-warn-border bg-warn-bg px-3 text-xs font-semibold text-warn hover:opacity-90 disabled:opacity-50"
+                >
+                  {t("mcp.delete")}
                 </IconButton>
               </li>
             ))}

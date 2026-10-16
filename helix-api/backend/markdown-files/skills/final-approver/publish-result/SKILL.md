@@ -1,9 +1,9 @@
 ---
-name: Publish result
+name: publish-result
 description: Validate the fetch against the ask, write text_report, hand off to orchester
 ---
 
-# Publish result
+# publish-result
 
 1. Read `goals`, `what_was_done`, and the `sql_fetch` preview.
 2. Check every goal against the fetched rows. On a gap, return `fail` with the gap list â€” missing filter, wrong grain, invented number, missing artifact.

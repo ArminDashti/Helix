@@ -164,6 +164,60 @@ def set_enabled(name: str, enabled: bool) -> dict[str, Any]:
     return list_servers()
 
 
+def _save_maps(
+    data: dict[str, Any], enabled_map: dict[str, Any], disabled_map: dict[str, Any]
+) -> None:
+    data[ENABLED_KEY] = enabled_map
+    if disabled_map:
+        data[DISABLED_KEY] = disabled_map
+    else:
+        data.pop(DISABLED_KEY, None)
+
+
+def import_servers(payload: Any) -> dict[str, Any]:
+    """Merge MCP definitions into mcp.json as enabled servers.
+
+    Accepts ``{"mcpServers": {...}}`` (Cursor format) or a bare ``{name: spec}``
+    map. Same-named servers are replaced.
+    """
+    if not isinstance(payload, dict):
+        raise ValueError("config must be a JSON object")
+    incoming = payload.get(ENABLED_KEY, payload)
+    if not isinstance(incoming, dict) or not incoming:
+        raise ValueError("config must contain at least one MCP server")
+    for name, spec in incoming.items():
+        if not str(name).strip():
+            raise ValueError("MCP server names must be non-empty")
+        if not isinstance(spec, dict) or not (spec.get("command") or spec.get("url")):
+            raise ValueError(f"MCP server {name} needs a command or url")
+
+    path = mcp_config_path()
+    data = _read(path)
+    enabled_map = _server_map(data, ENABLED_KEY)
+    disabled_map = _server_map(data, DISABLED_KEY)
+    for name, spec in incoming.items():
+        disabled_map.pop(str(name), None)
+        enabled_map[str(name)] = spec
+    _save_maps(data, enabled_map, disabled_map)
+    _write(path, data)
+    return list_servers()
+
+
+def delete_server(name: str) -> dict[str, Any]:
+    """Remove one MCP server entry from mcp.json (enabled or disabled)."""
+    path = mcp_config_path()
+    data = _read(path)
+    enabled_map = _server_map(data, ENABLED_KEY)
+    disabled_map = _server_map(data, DISABLED_KEY)
+    if name not in enabled_map and name not in disabled_map:
+        raise ValueError(f"unknown MCP server: {name}")
+    enabled_map.pop(name, None)
+    disabled_map.pop(name, None)
+    _save_maps(data, enabled_map, disabled_map)
+    _write(path, data)
+    return list_servers()
+
+
 def ensure_sql_server() -> dict[str, Any]:
     """Create/refresh the SQL Server MCP entry from Settings → Database.
 

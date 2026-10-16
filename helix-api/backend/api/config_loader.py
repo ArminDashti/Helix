@@ -33,14 +33,12 @@ DEFAULT_OPENROUTER_TOKEN_ENV = "OPENROUTER_TOKEN"
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 PROVIDER_OPENROUTER = "openrouter"
 PROVIDER_OPENAI_COMPATIBLE = "openai_compatible"
-PROVIDER_CURSOR_HEADLESS_CLI = "cursor_headless_cli"
 PROVIDER_OPENCODE_GO = "opencode_go"
 
 # Connectors: every LLM back-end the user can pick, in dropdown order. A connector owns whatever
 # the app can decide for the user — endpoint, default model, key env var — so Settings only asks
-# for the API key when the vendor endpoint is fixed (`asks_base_url` False), hides the
-# Cursor-proxy workspace field on connectors that never use it, and skips the key field entirely
-# on connectors that authenticate out of band (`api_key_required` False).
+# for the API key when the vendor endpoint is fixed (`asks_base_url` False), and skips the key
+# field entirely on connectors that authenticate out of band (`api_key_required` False).
 CONNECTORS: dict[str, dict[str, Any]] = {
     PROVIDER_OPENROUTER: {
         "id": PROVIDER_OPENROUTER,
@@ -48,7 +46,6 @@ CONNECTORS: dict[str, dict[str, Any]] = {
         "base_url": DEFAULT_OPENROUTER_BASE_URL,
         "token_env": DEFAULT_OPENROUTER_TOKEN_ENV,
         "asks_base_url": True,
-        "asks_workspace": True,
         "api_key_required": True,
         "key_url": "https://openrouter.ai/keys",
     },
@@ -62,7 +59,6 @@ CONNECTORS: dict[str, dict[str, Any]] = {
         "default_model": "deepseek-v4-flash",
         "token_env": "OPENCODE_GO_API_KEY",
         "asks_base_url": False,
-        "asks_workspace": False,
         "api_key_required": True,
         "key_url": "https://opencode.ai/auth",
         # opencode.ai sits behind Cloudflare, which answers urllib's default User-Agent with
@@ -78,31 +74,11 @@ CONNECTORS: dict[str, dict[str, Any]] = {
         "base_url": "",
         "token_env": DEFAULT_OPENROUTER_TOKEN_ENV,
         "asks_base_url": True,
-        "asks_workspace": True,
         "api_key_required": True,
-        "key_url": "",
-    },
-    PROVIDER_CURSOR_HEADLESS_CLI: {
-        "id": PROVIDER_CURSOR_HEADLESS_CLI,
-        "label": "Cursor-Headless-CLI",
-        "base_url": "",
-        "token_env": "CURSOR_API_KEY",
-        "asks_base_url": False,
-        "asks_workspace": True,
-        "api_key_required": False,
         "key_url": "",
     },
 }
 VALID_PROVIDERS = tuple(CONNECTORS)
-
-
-def _normalize_llm_mode(value: Any) -> str:
-    """Cursor headless / proxy mode — Agent only (ask/plan are non-executing)."""
-    mode = str(value or "").strip().lower()
-    if mode in ("", "agent"):
-        return "agent"
-    # Coerce ask/plan (and any unknown) to agent.
-    return "agent"
 
 
 DEFAULT_DATABASE = {
@@ -131,7 +107,6 @@ DEFAULT_OPENROUTER = {
     "token_env": DEFAULT_OPENROUTER_TOKEN_ENV,
     "base_url": DEFAULT_OPENROUTER_BASE_URL,
     "app_name": "Helix",
-    "default_model": DEFAULT_LLM_MODEL,
     "agents": {agent_id: {"model": model} for agent_id, model in DEFAULT_AGENT_MODELS.items()},
 }
 
@@ -729,23 +704,6 @@ def fetch_openrouter_models(*, force: bool = False) -> list[dict[str, str]]:
     Returns list of {id, name}. Raises ValueError if token/base URL missing or request fails.
     """
     now = time.time()
-    if get_provider() == PROVIDER_CURSOR_HEADLESS_CLI:
-        from .llm_client import list_cursor_cli_models
-
-        cache_key = "cursor_headless_cli"
-        if (
-            not force
-            and _MODELS_CACHE["models"]
-            and _MODELS_CACHE.get("base_url") == cache_key
-            and (now - float(_MODELS_CACHE["fetched_at"])) < _MODELS_CACHE_TTL_SEC
-        ):
-            return list(_MODELS_CACHE["models"])
-        models = _catalog_with_auto(list_cursor_cli_models())
-        _MODELS_CACHE["fetched_at"] = now
-        _MODELS_CACHE["models"] = models
-        _MODELS_CACHE["base_url"] = cache_key
-        return list(models)
-
     base_url = get_llm_base_url()
     if (
         not force
@@ -817,9 +775,7 @@ def get_openrouter_settings() -> dict[str, Any]:
     agents_raw = raw.get("agents") if isinstance(raw.get("agents"), dict) else {}
     # Agents without a model of their own follow the connector's default (not the OpenRouter-era
     # constant), so switching connector never leaves an agent pinned to a retired vendor's model.
-    default_model = (
-        str(raw.get("default_model") or "").strip() or provider_default_model(provider)
-    )
+    fallback_model = provider_default_model(provider)
     # Every known agent gets an entry. The Settings form round-trips this map straight back on
     # save, so an agent missing here would return as the form's placeholder and overwrite the
     # model the admin had stored for it.
@@ -827,13 +783,11 @@ def get_openrouter_settings() -> dict[str, Any]:
     for agent_id in ordered_agent_ids():
         entry = agents_raw.get(agent_id) if isinstance(agents_raw.get(agent_id), dict) else {}
         model = str(entry.get("model") or "").strip()
-        agents[agent_id] = {"model": model or default_model}
+        agents[agent_id] = {"model": model or fallback_model}
 
     token = get_openrouter_token()
     stored_base_url = _normalize_base_url(raw.get("base_url"))
     base_url = stored_base_url or provider_default_base_url(provider)
-    workspace = str(raw.get("workspace") or "").strip()
-    mode = _normalize_llm_mode(raw.get("mode"))
     return {
         "base_url": base_url,
         "app_name": (
@@ -841,11 +795,8 @@ def get_openrouter_settings() -> dict[str, Any]:
             if raw.get("app_name") in (None, "")
             else str(raw.get("app_name"))
         ),
-        "default_model": default_model,
         "agents": agents,
         "token_configured": bool(token),
-        "workspace": workspace,
-        "mode": mode,
     }
 
 
@@ -874,23 +825,11 @@ def update_openrouter_settings(payload: dict[str, Any]) -> dict[str, Any]:
         managed_base_url = provider_default_base_url(provider)
         if managed_base_url:
             stored_base_url = managed_base_url
-    stored_workspace = str(raw.get("workspace") or "").strip()
-    if "workspace" in payload:
-        stored_workspace = str(payload.get("workspace") or "").strip()
-    stored_mode = _normalize_llm_mode(raw.get("mode"))
-    if "mode" in payload:
-        stored_mode = _normalize_llm_mode(payload.get("mode"))
     if "app_name" in payload:
         value = payload["app_name"]
         current["app_name"] = (
             DEFAULT_OPENROUTER["app_name"] if value in (None, "") else str(value)
         )
-    if "default_model" in payload:
-        value = payload["default_model"]
-        if value is None or str(value).strip() == "":
-            raise ValueError("default_model must be a non-empty string")
-        current["default_model"] = str(value).strip()
-
     agents_payload = payload.get("agents")
     if isinstance(agents_payload, dict):
         allowed_ids = known_agent_ids()
@@ -910,13 +849,8 @@ def update_openrouter_settings(payload: dict[str, Any]) -> dict[str, Any]:
         "token_env": stored_env,
         "base_url": stored_base_url,
         "app_name": current["app_name"],
-        "default_model": current["default_model"],
         "agents": deepcopy(current["agents"]),
     }
-    if stored_workspace:
-        section["workspace"] = stored_workspace
-    if stored_mode:
-        section["mode"] = stored_mode
     if "timeout_seconds" in raw:
         section["timeout_seconds"] = raw["timeout_seconds"]
     if stored_token:
@@ -979,10 +913,6 @@ def _seed_connector_defaults(data: dict[str, Any], previous: str, provider: str)
 
     previous_model = provider_default_model(previous)
     next_model = provider_default_model(provider)
-    stored_model = str(raw.get("default_model") or "").strip()
-    if stored_model in ("", previous_model, next_model):
-        raw["default_model"] = next_model
-
     previous_env = provider_default_token_env(previous)
     next_env = provider_default_token_env(provider)
     stored_env = str(raw.get("token_env") or "").strip()
@@ -1498,7 +1428,4 @@ def get_agent_model(agent_id: str) -> str:
         model = str(entry.get("model") or "").strip()
         if model and model != "auto":
             return model
-    default = str(settings.get("default_model") or "").strip()
-    if default and default != "auto":
-        return default
-    return DEFAULT_LLM_MODEL
+    return provider_default_model(get_provider())

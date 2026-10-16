@@ -18,21 +18,21 @@ logger = logging.getLogger(__name__)
 
 SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}$")
 SKILL_DISPLAY_NAMES = {
-    "orchestrate-pipeline": "Orchestrate pipeline",
+    "orchestrate-pipeline": "orchestrate-pipeline",
     "echarts-response": "ECharts response",
     "sql-safety": "SQL safety",
     "text-report": "Text report",
-    "gather-data": "Gather data",
-    "publish-result": "Publish result",
+    "gather-data": "gather-data",
+    "publish-result": "publish-result",
     "package-ui-payload": "Package UI payload",
     "understand-database": "Understand database",
     "generate-grid": "Generate grid",
     "generate-analytical-report": "Generate analytical report",
-    "guard-prompt": "Guard prompt",
+    "guard-prompt": "guard-prompt",
     "match-prompt-goal": "Match prompt goal",
     "conduct-research": "Conduct research",
     "aggregate-research-brief": "Aggregate research brief",
-    "search-web": "Search web",
+    "search-web": "search-web",
 }
 
 

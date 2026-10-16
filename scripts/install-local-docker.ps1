@@ -34,26 +34,6 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Installing/updating stack '$ProjectName' (volumes preserved)..."
 Push-Location $ComposeDir
 try {
-    $authPath = Join-Path $env:APPDATA 'Cursor\auth.json'
-    if (-not (Test-Path -LiteralPath $authPath)) {
-        throw "Cursor IDE auth.json not found at $authPath - sign in to Cursor IDE first."
-    }
-    $authUnix = ($authPath -replace '\\', '/')
-    $envFile = Join-Path $ComposeDir '.env'
-    $envLines = @()
-    if (Test-Path -LiteralPath $envFile) {
-        $envLines = Get-Content -LiteralPath $envFile
-    }
-    $filtered = @($envLines | Where-Object {
-        $_ -notmatch '^\s*HOST_CURSOR_AUTH_FILE\s*=' -and
-        $_ -notmatch '^\s*HOST_WORKSPACE_ROOT\s*=' -and
-        $_ -notmatch '^\s*HOST_WORKSPACE_MOUNT\s*='
-    })
-    $filtered += ("HOST_CURSOR_AUTH_FILE={0}" -f $authUnix)
-    $filtered += 'HOST_WORKSPACE_ROOT=C:/Users'
-    $filtered += 'HOST_WORKSPACE_MOUNT=/host'
-    Set-Content -LiteralPath $envFile -Value $filtered -Encoding utf8
-
     foreach ($vol in @('helix-sqlite-data', 'helix-pip-cache', 'helix-webui-node-modules')) {
         docker volume create $vol 2>$null | Out-Null
     }

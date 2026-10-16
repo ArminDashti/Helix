@@ -32,6 +32,26 @@ server {
         add_header Cache-Control "public, immutable";
     }
 
+    # Service worker, manifest and HTML must always revalidate so updates reach clients.
+    location = /helix/sw.js {
+        alias /usr/share/nginx/html/sw.js;
+        add_header Cache-Control "no-cache";
+    }
+
+    location = /helix/manifest.webmanifest {
+        alias /usr/share/nginx/html/manifest.webmanifest;
+        add_header Cache-Control "no-cache";
+    }
+
+    location = /helix/ {
+        rewrite ^ /helix/index.html last;
+    }
+
+    location = /helix/index.html {
+        alias /usr/share/nginx/html/index.html;
+        add_header Cache-Control "no-cache";
+    }
+
     location /helix/ {
         alias /usr/share/nginx/html/;
         try_files $uri $uri/ @helix_spa;
@@ -39,6 +59,7 @@ server {
 
     location @helix_spa {
         root /usr/share/nginx/html;
+        add_header Cache-Control "no-cache";
         rewrite ^ /index.html break;
     }
 }

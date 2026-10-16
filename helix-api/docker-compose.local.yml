@@ -23,11 +23,7 @@ services:
       # Bind-mount mtimes on Windows Docker: force polling reloader.
       WATCHFILES_FORCE_POLLING: "true"
       OPENROUTER_TOKEN: ${OPENROUTER_TOKEN:-}
-      CURSOR_API_KEY: ${CURSOR_API_KEY:-}
-      CURSOR_AGENT_BIN: ${CURSOR_AGENT_BIN:-cursor-agent}
-      CURSOR_AUTH_FILE: ${CURSOR_AUTH_FILE:-/run/cursor-auth/auth.json}
-      HOST_WORKSPACE_ROOT: ${HOST_WORKSPACE_ROOT:-C:/Users}
-      HOST_WORKSPACE_MOUNT: ${HOST_WORKSPACE_MOUNT:-/host}
+      GITHUB_PAT_TOKEN: ${GITHUB_PAT_TOKEN:-}
     entrypoint: []
     command:
       - sh
@@ -37,8 +33,6 @@ services:
       - .:/app
       - helix-pip-cache:/root/.cache/pip
       - helix-sqlite-data:/app/backend/data
-      - ${HOST_WORKSPACE_ROOT:-C:/Users}:${HOST_WORKSPACE_MOUNT:-/host}
-      - ${HOST_CURSOR_AUTH_FILE:-C:/Users/armin/AppData/Roaming/Cursor/auth.json}:/run/cursor-auth/auth.json:ro
     ports:
       - "8173:8000"
     networks:

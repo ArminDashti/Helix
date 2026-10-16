@@ -1,28 +1,28 @@
 # Graph Report - helix  (2026-10-16)
 
 ## Corpus Check
-- 208 files · ~433,347 words
+- 200 files · ~453,562 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2385 nodes · 5399 edges · 139 communities (108 shown, 31 thin omitted)
-- Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 23 edges (avg confidence: 0.59)
+- 2382 nodes · 5240 edges · 128 communities (107 shown, 21 thin omitted)
+- Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 23 edges (avg confidence: 0.62)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d1b0970f`
+- Built from commit: `c75b61bf`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - Database catalog
 - markdown_store.py
-- sqlserver.py
+- sqlite.py
 - views.py
 - client.js
 - pipeline_graph.py
 - ResultsPage.jsx
-- useI18n
+- Layout.jsx
 - package.json
 - tables/INDEX.md
 - pipelineFlow.js
@@ -31,7 +31,7 @@
 - pipeline_langgraph.py
 - llm_client.py
 - pipeline_run.py
-- AgentsPage.jsx
+- useI18n
 - tests.py
 - config_loader.py
 - LogsPage.jsx
@@ -40,16 +40,16 @@
 - OperatorQuestionTests
 - AgentAssetContractTests
 - select_rag_context
-- Layout.jsx
+- I18nContext.jsx
 - Code Removal (Dead / Orphan Only)
-- get_database_settings
+- LiveSyncContext.jsx
 - results_store.py
-- _run_orchester
+- _guardian_hard_block
 - helix.mjs
 - mcp_config.py
 - run_store.py
-- connector_meta
-- LiveSyncContext.jsx
+- get_database_settings
+- sqlserver.py
 - logs_store.py
 - Testing Playground for Settings/API
 - Workflow
@@ -70,12 +70,12 @@
 - GitNexus — Code Intelligence
 - Variable Naming Conventions
 - Helix agents
-- armin-dev-policies/SKILL.md
-- Anti-pattern reference
-- Workflow
+- safe-refactor.md
+- db_dialects/__init__.py
+- sql_execute.py
 - researcher
 - web-searcher
-- search_web
+- _dispatch_tool
 - researcher
 - web-searcher
 - Helix base instruction
@@ -83,16 +83,16 @@
 - build-admin-guide-pdf.mjs
 - GitNexus — Code Intelligence
 - Software Versioning
-- Armin Dev Policies
+- Workflow
 - final-approver
 - guardian
-- Researcher rules
+- postgresql.py
 - final-approver
 - guardian
-- Researcher rules
+- Template
 - Project Experience Log
 - Orchester
-- I18nContext.jsx
+- autoRtl.js
 - Orchester
 - Helix API
 - Helix Web UI
@@ -101,57 +101,45 @@
 - main
 - .agents/rules/ponytail.md
 - reuse-task-procedures/INDEX.md
-- safe-refactor/SKILL.md
-- 00-build-result.md
-- skills/publish-result/SKILL.md
-- 00-guard-prompt.md
-- skills/guard-prompt/SKILL.md
-- 00-orchester.md
-- skills/orchestrate-pipeline/SKILL.md
+- connector_meta
+- Armin WebUI Curations & Design Guidelines
+- publish-result
+- web_search_enabled
+- guard-prompt
+- armin-dev-policies/SKILL.md
+- orchestrate-pipeline
 - registry.md
-- skills/gather-data/SKILL.md
-- 00-web-search-only.md
-- skills/search-web/SKILL.md
+- Constraints
+- ensure_config_exists
+- search-web
+- signing.md
 - asgi.py
 - settings.py
 - wsgi.py
-- build-result.md
-- guard-prompt.md
-- rules/orchester.md
-- web-search-only.md
-- final-approver/publish-result/SKILL.md
-- guardian/guard-prompt/SKILL.md
-- orchester/orchestrate-pipeline/SKILL.md
-- researcher/gather-data/SKILL.md
-- web-searcher/search-web/SKILL.md
+- _rewrite_unresolvable_hostname_to_localhost
+- publish-result
+- guard-prompt
+- orchestrate-pipeline
+- Constraints
+- search-web
 - entrypoint.sh
 - vite.config.js
-- db_dialects/__init__.py
-- sql_execute.py
-- postgresql.py
-- _SqlServerConnection
-- sqlite.py
 - calendar_hint_for_prompt
-- ensure_pyodbc_installed
+- org.py
 - helix-cli/package.json
-- app-lifecycle-cli/SKILL.md
-- web_search_enabled
-- AgentScopedMarkdownPage.jsx
-- ensure_config_exists
-- fetch_openrouter_models
-- _rewrite_unresolvable_hostname_to_localhost
+- App CLI Manager Skill
 
 ## God Nodes (most connected - your core abstractions)
 1. `Database catalog` - 486 edges
-2. `useI18n()` - 81 edges
-3. `requestJson()` - 62 edges
-4. `save_config()` - 49 edges
+2. `useI18n()` - 79 edges
+3. `requestJson()` - 61 edges
+4. `save_config()` - 47 edges
 5. `_error()` - 42 edges
 6. `load_config()` - 40 edges
-7. `ensure_dirs()` - 37 edges
-8. `failMessage()` - 36 edges
-9. `_json_body()` - 35 edges
-10. `get_openrouter_settings()` - 29 edges
+7. `_json_body()` - 34 edges
+8. `failMessage()` - 33 edges
+9. `ensure_dirs()` - 27 edges
+10. `update_openrouter_settings()` - 25 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Ensure-Docker()` --calls--> `docker`  [INFERRED]
@@ -168,39 +156,39 @@
 ## Import Cycles
 - None detected.
 
-## Communities (139 total, 31 thin omitted)
+## Communities (128 total, 21 thin omitted)
 
 ### Community 0 - "Database catalog"
 Cohesion: 0.00
 Nodes (486): AssetAccounting.ForoshAmval, AssetAccounting.ForoshAmvalSatr, AssetAccounting.vForoshAmval, AssetAccounting.vForoshAmvalSatr, BI.vwDimSalesDocumentType, BI.vwDimSalesKind, BI.vwFactSales, BI.vwFactSalesTarget (+478 more)
 
 ### Community 1 - "markdown_store.py"
-Cohesion: 0.05
-Nodes (119): parse_table_name(), _docs_markdown(), _ensure_table_section(), _escape_md_cell(), filter_tables_reference(), format_live_catalog_for_prompt(), get_table_docs(), list_docs_tables() (+111 more)
+Cohesion: 0.06
+Nodes (100): parse_table_name(), _docs_markdown(), _ensure_table_section(), _escape_md_cell(), filter_tables_reference(), format_live_catalog_for_prompt(), get_table_docs(), list_docs_tables() (+92 more)
 
-### Community 2 - "sqlserver.py"
+### Community 2 - "sqlite.py"
 Cohesion: 0.21
-Nodes (21): cell_value(), _looks_like_id_column(), prefer_id_order_column(), Any, Shared SQL introspection helpers for all database engines., Pick a default ORDER BY column: PK, then *Id / id, then lowest ordinal., validate_order_column(), validate_where() (+13 more)
+Nodes (19): cell_value(), _looks_like_id_column(), prefer_id_order_column(), Any, Shared SQL introspection helpers for all database engines., Pick a default ORDER BY column: PK, then *Id / id, then lowest ordinal., validate_order_column(), validate_where() (+11 more)
 
 ### Community 3 - "views.py"
-Cohesion: 0.12
-Nodes (79): csrf_exempt, create_user(), delete_user(), _ensure_armin_admin(), ensure_org(), get_user(), _is_armin(), list_users() (+71 more)
+Cohesion: 0.13
+Nodes (72): csrf_exempt, create_feedback_issue(), get_latest_release(), _github_request(), Any, GitHub-backed app support: latest release lookup and feedback issues., admin_branding(), admin_database() (+64 more)
 
 ### Community 4 - "client.js"
-Cohesion: 0.06
-Nodes (70): answerRun(), API_BASE, ApiError, apiFetch(), apiUrl(), configureSqlServerMcp(), createAgent(), createReference() (+62 more)
+Cohesion: 0.07
+Nodes (65): answerRun(), API_BASE, ApiError, apiFetch(), apiUrl(), configureSqlServerMcp(), createAgent(), createReference() (+57 more)
 
 ### Community 5 - "pipeline_graph.py"
-Cohesion: 0.06
-Nodes (70): is_phase_agent(), is_pipeline_agent(), is_sub_agent(), Canonical agent pipeline metadata., Kept for callers; phase-only roster is empty — always False., True for graph-eligible agents (orchester, guardian, researcher, final-…, Map graph instance id (e.g. guardian__2) to roster agent id., resolve_agent_definition_id() (+62 more)
+Cohesion: 0.07
+Nodes (68): is_phase_agent(), is_pipeline_agent(), is_sub_agent(), Canonical agent pipeline metadata., Kept for callers; phase-only roster is empty — always False., True for graph-eligible agents (orchester, guardian, researcher, final-…, Map graph instance id (e.g. guardian__2) to roster agent id., resolve_agent_definition_id() (+60 more)
 
 ### Community 6 - "ResultsPage.jsx"
-Cohesion: 0.08
-Nodes (53): fetchBranding(), fetchResult(), fetchResults(), formatDateTime(), formatDurationSeconds(), formatNumber(), intlLocale(), pad2() (+45 more)
+Cohesion: 0.11
+Nodes (42): fetchBranding(), fetchResult(), fetchResults(), formatDateTime(), formatDurationSeconds(), formatNumber(), intlLocale(), pad2() (+34 more)
 
-### Community 7 - "useI18n"
-Cohesion: 0.14
-Nodes (31): fetchDocsTable(), fetchRules(), fetchSkills(), saveDocsColumn(), saveDocsTableOverview(), ColumnDocsModal(), ErrorModal(), IconButton() (+23 more)
+### Community 7 - "Layout.jsx"
+Cohesion: 0.18
+Nodes (16): fetchHealth(), subscribeApiErrors(), applyTheme(), formatLinkStatus(), isConnectedStatus(), Layout(), readThemePreference(), resolveTheme() (+8 more)
 
 ### Community 8 - "package.json"
 Cohesion: 0.05
@@ -212,10 +200,10 @@ Nodes (35): Alphabetical (schema-table), By sales flow, Naming tip, Quick find, 
 
 ### Community 10 - "pipelineFlow.js"
 Cohesion: 0.10
-Nodes (44): AgentArrangeDesigner(), StageRow(), AgentGraphDesigner(), AgentGraphDesignerInner(), BranchNode(), graphToFlowNodes(), LoopGroupNode(), nodeTypes (+36 more)
+Nodes (46): fetchPipelineBundle(), fetchPipelineGraph(), AgentArrangeDesigner(), StageRow(), AgentGraphDesigner(), AgentGraphDesignerInner(), BranchNode(), graphToFlowNodes() (+38 more)
 
 ### Community 11 - "save_config"
-Cohesion: 0.16
+Cohesion: 0.17
 Nodes (14): get_llm_base_url(), get_openrouter_settings(), get_provider(), _normalize_base_url(), Chat/models host: the stored URL, else the connector's own endpoint., save_config(), update_openrouter_settings(), update_provider() (+6 more)
 
 ### Community 12 - "dependencies"
@@ -223,40 +211,40 @@ Cohesion: 0.05
 Nodes (41): echarts, echarts-for-react, dependencies, echarts, echarts-for-react, html2canvas, html2pdf.js, jspdf (+33 more)
 
 ### Community 13 - "pipeline_langgraph.py"
-Cohesion: 0.16
-Nodes (35): assemble_agent_prompt(), Build the runtime prompt from the agent meta plus assigned rules and skills., _ask_operator(), build_pipeline_graph(), _clarifying_questions(), _emit(), _entry_node(), get_compiled_graph() (+27 more)
+Cohesion: 0.15
+Nodes (36): assemble_agent_prompt(), Build the runtime prompt from the agent meta plus assigned rules and skills., _ask_operator(), build_pipeline_graph(), _clarifying_questions(), _emit(), _entry_node(), get_compiled_graph() (+28 more)
 
 ### Community 14 - "llm_client.py"
-Cohesion: 0.10
-Nodes (37): _catalog_tables(), _match_tables_from_text(), Any, Guardian review of plain-language per-user data access., Ask the guardian LLM to accept/reject a plain-language data-access policy.…, review_data_access_policy(), get_llm_headers(), get_llm_timeout_seconds() (+29 more)
+Cohesion: 0.11
+Nodes (32): _catalog_tables(), _match_tables_from_text(), Any, Guardian review of plain-language per-user data access., Ask the guardian LLM to accept/reject a plain-language data-access policy.…, review_data_access_policy(), _catalog_with_auto(), fetch_openrouter_models() (+24 more)
 
 ### Community 15 - "pipeline_run.py"
-Cohesion: 0.12
-Nodes (40): langgraph_events(), Run the four-agent graph; yield step events; set ctx['_orchester_outcome'].…, _append_step_log(), _apply_answers(), _assistant_message_for_history(), _dispatch_tool(), _error_event(), _failure_detail() (+32 more)
+Cohesion: 0.13
+Nodes (36): agent_display_name(), _append_step_log(), _apply_answers(), _assistant_message_for_history(), _error_event(), _failure_detail(), _failure_duration_s(), _failure_steps() (+28 more)
 
-### Community 16 - "AgentsPage.jsx"
-Cohesion: 0.21
-Nodes (17): fetchAgents(), DataGrid(), FlashMessage(), StackedNames(), useLiveSync(), useFlash(), AboutMePage(), ContactEmail() (+9 more)
+### Community 16 - "useI18n"
+Cohesion: 0.11
+Nodes (38): fetchAgents(), fetchDocsTable(), fetchSkills(), saveDocsColumn(), saveDocsTableOverview(), ColumnDocsModal(), DataGrid(), FlashMessage() (+30 more)
 
 ### Community 17 - "tests.py"
-Cohesion: 0.09
-Nodes (12): get_active_provider_settings(), get_agent_model(), get_connectors(), Connector descriptors for the Settings form. Never carries a secret., The active connector plus the catalog the Settings form builds its pickers from., DbExplorerObjectKindTests, DocsCatalogPromptTests, LogsCollectionTests (+4 more)
+Cohesion: 0.06
+Nodes (16): get_active_provider_settings(), get_connectors(), Connector descriptors for the Settings form. Never carries a secret., The active connector plus the catalog the Settings form builds its pickers from., pyodbc connection whose close() cannot mask a prior ODBC error., _SqlServerConnection, _ensure_sqlserver_top(), Cap a SQL Server SELECT so the database does not stream an unbounded result. (+8 more)
 
 ### Community 18 - "config_loader.py"
-Cohesion: 0.14
-Nodes (38): is_builtin_agent(), _apply_agent_profile(), create_custom_agent(), delete_custom_agent(), _drop_stale_pipeline_graph(), _ensure_single_orchester_pipeline(), get_agent_display_names(), get_agent_meta() (+30 more)
+Cohesion: 0.16
+Nodes (35): is_builtin_agent(), agent_company_label(), _apply_agent_profile(), create_custom_agent(), delete_custom_agent(), _drop_stale_pipeline_graph(), _ensure_single_orchester_pipeline(), get_agent_display_names() (+27 more)
 
 ### Community 19 - "LogsPage.jsx"
 Cohesion: 0.22
 Nodes (12): agentDefinitionId(), CopyButton(), copyText(), DetailField(), formatDuration(), hasText(), kindLabel(), LOG_KIND_FILTERS (+4 more)
 
 ### Community 20 - "SettingsPage.jsx"
-Cohesion: 0.11
-Nodes (23): fetchDatabaseSettings(), fetchOpenRouterModels(), fetchOpenRouterSettings(), fetchProviderSettings(), ModelCombobox(), modelId(), modelName(), ADMIN_GUIDE_PDF (+15 more)
+Cohesion: 0.09
+Nodes (31): fetchDatabaseSettings(), fetchDbExplorerColumns(), fetchDbExplorerTables(), fetchOpenRouterModels(), fetchOpenRouterSettings(), fetchProviderSettings(), ModelCombobox(), modelId() (+23 more)
 
 ### Community 21 - "sample_database.py"
-Cohesion: 0.18
-Nodes (29): Connection, _build_big_from_medium(), _build_small_from_medium(), _current_version(), default_sample_db_path(), download_adventureworks_source(), ensure_configured_sample_if_needed(), ensure_sample_database() (+21 more)
+Cohesion: 0.19
+Nodes (27): Connection, _build_big_from_medium(), _build_small_from_medium(), _current_version(), default_sample_db_path(), download_adventureworks_source(), ensure_sample_database(), ensure_sample_tier() (+19 more)
 
 ### Community 22 - "OperatorQuestionTests"
 Cohesion: 0.14
@@ -264,47 +252,47 @@ Nodes (9): OperatorQuestionTests, PausedRunStoreTests, _PauseSpoolMixin, Keep pa
 
 ### Community 23 - "AgentAssetContractTests"
 Cohesion: 0.22
-Nodes (4): AgentAssetContractTests, One rule and one skill per agent, catalog-agnostic text, web search gated by…, Locate the web UI i18n directory, in-repo or via the Docker /host mount., The data target is whatever Settings points at, so the wording stays generic.…
+Nodes (4): AgentAssetContractTests, One skill per agent, catalog-agnostic text, web search gated by config., Locate the web UI i18n directory, in-repo or via the Docker /host mount., The data target is whatever Settings points at, so the wording stays generic.…
 
 ### Community 24 - "select_rag_context"
 Cohesion: 0.10
 Nodes (28): _entry(), _fit(), _hits(), prompt_terms(), Any, Lexical retrieval over the RAG knowledge store (``markdown-files/rag/``). This…, Pack the knowledge documents that match ``prompt`` into a token budget. Returns…, Lowercased content words of a prompt, deduplicated in first-seen order. (+20 more)
 
-### Community 25 - "Layout.jsx"
-Cohesion: 0.17
-Nodes (18): fetchHealth(), subscribeApiErrors(), applyTheme(), formatLinkStatus(), isConnectedStatus(), Layout(), readThemePreference(), resolveTheme() (+10 more)
+### Community 25 - "I18nContext.jsx"
+Cohesion: 0.11
+Nodes (29): AgentScopedMarkdownPage(), ErrorModal(), IconButton(), PageHeader(), agentLabel(), formatElapsed(), RunProgressModal(), statusBadge() (+21 more)
 
 ### Community 26 - "Code Removal (Dead / Orphan Only)"
 Cohesion: 0.10
 Nodes (19): 1. Identify candidate targets, 2. Prove dead/orphan status (required), 3. Confirm no hidden connections, 4. Execute removal, 5. Validate and report, Code Removal (Dead / Orphan Only), Edge cases, Eligibility (all must pass) (+11 more)
 
-### Community 27 - "get_database_settings"
-Cohesion: 0.22
-Nodes (13): connection_string_to_database(), database_to_connection_string(), _explicit_warehouse_engine(), _finalize_database(), get_database_engine(), get_database_settings(), is_user_provided_database(), True when the user configured a real database (not the built-in sample). (+5 more)
+### Community 27 - "LiveSyncContext.jsx"
+Cohesion: 0.18
+Nodes (12): apiUrl(), fetchStateVersion(), LiveSyncContext, LiveSyncProvider(), allResourcesFromPath(), anyListeners, emitLiveChange(), listeners (+4 more)
 
 ### Community 28 - "results_store.py"
 Cohesion: 0.26
 Nodes (19): _coerce_count(), _coerce_duration_s(), _coerce_rag(), _coerce_usage(), create_result(), delete_result(), _empty(), get_result() (+11 more)
 
 ### Community 30 - "helix.mjs"
-Cohesion: 0.13
-Nodes (45): API_DIR, APP_DIR, applyPort(), cleanEnv(), CLI_DIR, cmdPort(), cmdReinstall(), cmdRun() (+37 more)
+Cohesion: 0.14
+Nodes (44): API_DIR, APP_DIR, applyPort(), cleanEnv(), CLI_DIR, cmdPort(), cmdRebuild(), cmdRun() (+36 more)
 
 ### Community 31 - "mcp_config.py"
-Cohesion: 0.26
-Nodes (17): ensure_sql_server(), list_servers(), mcp_config_path(), Any, Path, MCP server configuration helpers. Reads / writes Cursor's ``mcp.json``: list…, All MCP servers with secrets stripped (env/header values never leave the file)., Enable/disable one MCP by moving it between mcpServers / disabledMcpServers.… (+9 more)
+Cohesion: 0.24
+Nodes (22): delete_server(), ensure_sql_server(), import_servers(), list_servers(), mcp_config_path(), Any, Path, MCP server configuration helpers. Reads / writes Cursor's ``mcp.json``: list… (+14 more)
 
 ### Community 32 - "run_store.py"
 Cohesion: 0.25
 Nodes (17): _fresh(), pause_run(), peek_paused(), pop_paused(), _prune_locked(), Any, Path, Registry of pipeline runs parked on an operator question. A paused run keeps… (+9 more)
 
-### Community 33 - "connector_meta"
-Cohesion: 0.20
-Nodes (12): connector_meta(), provider_default_base_url(), provider_default_model(), provider_default_token_env(), provider_label(), Descriptor of one connector; {} when the id is unknown., Vendor endpoint of a connector that owns one; '' means the user supplies it., Model the app proposes for a connector (falls back to the shared default). (+4 more)
+### Community 33 - "get_database_settings"
+Cohesion: 0.22
+Nodes (14): connection_string_to_database(), _explicit_warehouse_engine(), _finalize_database(), get_database_engine(), get_database_settings(), is_user_provided_database(), True when the user configured a real database (not the built-in sample)., Normalize settings. Sample SQLite is only used when the engine is sqlite. (+6 more)
 
-### Community 34 - "LiveSyncContext.jsx"
-Cohesion: 0.18
-Nodes (12): apiUrl(), fetchStateVersion(), LiveSyncContext, LiveSyncProvider(), allResourcesFromPath(), anyListeners, emitLiveChange(), listeners (+4 more)
+### Community 34 - "sqlserver.py"
+Cohesion: 0.31
+Nodes (15): database_to_connection_string(), bracket(), connect(), default_schema(), fqn(), _level1_type(), list_columns(), list_objects() (+7 more)
 
 ### Community 35 - "logs_store.py"
 Cohesion: 0.31
@@ -319,16 +307,16 @@ Cohesion: 0.14
 Nodes (13): About Me Section, Examples, Objective, Safety rules, Step 1: Place the page, Step 2: Layout (match helix), Step 3: Write the bio (eloquent, unique), Step 4: Contact email (anti-crawl) (+5 more)
 
 ### Community 38 - "Code Removal (Dead / Orphan Only)"
-Cohesion: 0.15
-Nodes (12): Code Removal (Dead / Orphan Only), Edge cases, Eligibility (all must pass), Example 1 — Remove orphan helper, Example 2 — Refuse connected code, Example 3 — Unused file, Example 4 — Unused-files tree cleanup, Examples (+4 more)
+Cohesion: 0.10
+Nodes (19): 1. Identify candidate targets, 2. Prove dead/orphan status (required), 3. Confirm no hidden connections, 4. Execute removal, 5. Validate and report, Code Removal (Dead / Orphan Only), Edge cases, Eligibility (all must pass) (+11 more)
 
 ### Community 39 - "Refactoring with GitNexus"
 Cohesion: 0.17
 Nodes (11): Bind the repository first, Checklists, Example: Rename `validateUser` to `authenticateUser`, Extract Module, Refactoring with GitNexus, Rename Symbol, Risk Rules, Split Function/Service (+3 more)
 
 ### Community 40 - "Detect Anti-Pattern"
-Cohesion: 0.17
-Nodes (12): Additional resources, Detect Anti-Pattern, Examples, Objective, Safety rules, Step 1: Scope, Step 2: Map structure, Step 3: Hunt by category (+4 more)
+Cohesion: 0.10
+Nodes (19): Additional resources, Detect Anti-Pattern, Examples, Objective, Anti-pattern reference, Coupling & cohesion, Data & concurrency, Distribution (+11 more)
 
 ### Community 41 - "Reuse task procedures"
 Cohesion: 0.17
@@ -363,8 +351,8 @@ Cohesion: 0.22
 Nodes (8): 1. Detect Docker, 2. Rebuild + re-run (keep data), 2b. Non-Docker: close, reinstall, run, 3. Pull Request, 4. Final report, Cheat-sheet, Never, Redeploy and open a PR
 
 ### Community 49 - "_package_result"
-Cohesion: 0.39
-Nodes (8): _as_number(), build_echarts_option(), build_grid(), _is_number(), Any, Build ECharts options and grids from fetched SQL rows., _effective_mode(), _package_result()
+Cohesion: 0.33
+Nodes (9): _as_number(), build_echarts_option(), build_grid(), _is_number(), Any, Build ECharts options and grids from fetched SQL rows., _effective_mode(), _normalize_chart_types() (+1 more)
 
 ### Community 50 - "demo.py"
 Cohesion: 0.44
@@ -375,8 +363,8 @@ Cohesion: 0.31
 Nodes (8): _pick_request_tables(), Any, Resolve user intent by connecting to the configured database. The pipeline…, Rank tables: exact request/intent matches first, then any table., Quote identifier for sqlite/sqlserver/postgres (best-effort, no injection)., Connect to DB and find what the user actually wants. Returns a dict: { "found":…, resolve_user_intent(), _safe_identifier()
 
 ### Community 52 - "GitNexus — Code Intelligence"
-Cohesion: 0.25
-Nodes (7): Always Do, CLI, GitNexus — Code Intelligence, lean-ctx, Learned User Preferences, Never Do, Resources
+Cohesion: 0.22
+Nodes (8): Always Do, CLI, GitNexus — Code Intelligence, lean-ctx, Learned User Preferences, Learned Workspace Facts, Never Do, Resources
 
 ### Community 53 - "Variable Naming Conventions"
 Cohesion: 0.25
@@ -386,13 +374,13 @@ Nodes (7): Core Rules & AI Behavior, File & Directory Naming, Language Quickshee
 Cohesion: 0.25
 Nodes (7): Contract: one rule and one skill per agent, Helix agents, Layout, Models, Pipeline, Protocol, Status
 
-### Community 56 - "Anti-pattern reference"
-Cohesion: 0.29
-Nodes (7): Anti-pattern reference, Coupling & cohesion, Data & concurrency, Distribution, False positives (usually skip), Layering (typical clean/onion/n-tier), Structure
+### Community 56 - "db_dialects/__init__.py"
+Cohesion: 0.33
+Nodes (13): parse_table_name(), connect(), get_dialect(), list_columns(), list_objects(), list_tables(), parse_table_name_for_engine(), Any (+5 more)
 
-### Community 57 - "Workflow"
-Cohesion: 0.29
-Nodes (7): 1. Identify candidate targets, 2. Prove dead/orphan status (required), 3. Confirm no hidden connections, 4. Execute removal, 5. Validate and report, Unused-files mode (file-tree cleanup), Workflow
+### Community 57 - "sql_execute.py"
+Cohesion: 0.31
+Nodes (13): BaseException, get_sql_settings(), _allowlisted_names(), _dbg(), _exception_text(), execute_select(), extract_sql(), _is_communication_link_failure() (+5 more)
 
 ### Community 58 - "researcher"
 Cohesion: 0.29
@@ -402,9 +390,9 @@ Nodes (6): Inputs, Notes, Outputs, researcher, Role, Tools
 Cohesion: 0.29
 Nodes (6): Constraints, Inputs, Notes, Outputs, Role, web-searcher
 
-### Community 60 - "search_web"
-Cohesion: 0.38
-Nodes (6): _ddg_search(), Any, Public web search for the web-searcher sub-agent (no database connection)., Run up to MAX_QUERIES distinct searches and return flat result rows., search_web(), _strip_tags()
+### Community 60 - "_dispatch_tool"
+Cohesion: 0.16
+Nodes (10): _dispatch_tool(), _normalize_web_search_queries(), Run one tool. Returns (result_json, done) where done means submit_result…, _ui_text(), _ddg_search(), Any, Public web search for the web-searcher sub-agent (no database connection)., Run up to MAX_QUERIES distinct searches and return flat result rows. (+2 more)
 
 ### Community 61 - "researcher"
 Cohesion: 0.29
@@ -434,9 +422,9 @@ Nodes (5): Always Do, CLI, GitNexus — Code Intelligence, Never Do, Resources
 Cohesion: 0.33
 Nodes (5): ⚠️ Agent Directive, Core Rules, Software Versioning, Version Bump Logic (On Commit/Push), Workflow
 
-### Community 68 - "Armin Dev Policies"
-Cohesion: 0.33
-Nodes (6): Armin Dev Policies, Default loop (every change), Hard rules, Principles (day-to-day craft), Topics, When
+### Community 68 - "Workflow"
+Cohesion: 0.14
+Nodes (13): About Me Section, Examples, Objective, Safety rules, Step 1: Place the page, Step 2: Layout (match helix), Step 3: Write the bio (eloquent, unique), Step 4: Contact email (anti-crawl) (+5 more)
 
 ### Community 69 - "final-approver"
 Cohesion: 0.33
@@ -446,9 +434,9 @@ Nodes (5): final-approver, Inputs, Notes, Outputs, Role
 Cohesion: 0.33
 Nodes (5): guardian, Inputs, Notes, Outputs, Role
 
-### Community 71 - "Researcher rules"
-Cohesion: 0.33
-Nodes (5): Answer the question, not the table, Make the database do the work, Persian runs, Researcher rules, Spend few queries, learn from each
+### Community 71 - "postgresql.py"
+Cohesion: 0.37
+Nodes (13): connect(), default_schema(), fqn(), list_columns(), list_objects(), list_tables(), Any, quote_ident() (+5 more)
 
 ### Community 72 - "final-approver"
 Cohesion: 0.33
@@ -458,9 +446,9 @@ Nodes (5): final-approver, Inputs, Notes, Outputs, Role
 Cohesion: 0.33
 Nodes (5): guardian, Inputs, Notes, Outputs, Role
 
-### Community 74 - "Researcher rules"
-Cohesion: 0.33
-Nodes (5): Answer the question, not the table, Make the database do the work, Persian runs, Researcher rules, Spend few queries, learn from each
+### Community 74 - "Template"
+Cohesion: 0.18
+Nodes (10): 🛠️ Changed, 🧠 Learning, Objective, Overview, ⚠️ Risks, Rules, 💡 Suggestions, Template (+2 more)
 
 ### Community 75 - "Project Experience Log"
 Cohesion: 0.33
@@ -470,9 +458,9 @@ Nodes (5): A:, A:, Project Experience Log, Q: Why did Helix API report "pyodbc i
 Cohesion: 0.40
 Nodes (4): Flow, Notes, Orchester, Role
 
-### Community 77 - "I18nContext.jsx"
-Cohesion: 0.13
-Nodes (26): App(), agentLabel(), formatElapsed(), RunProgressModal(), statusBadge(), I18nContext, I18nProvider(), translateKnownMessage() (+18 more)
+### Community 77 - "autoRtl.js"
+Cohesion: 0.18
+Nodes (19): App(), I18nProvider(), applyLocale(), isLocale(), LOCALE_STORAGE_KEY, localeToDir(), localeToHtmlLang(), persistLocale() (+11 more)
 
 ### Community 78 - "Orchester"
 Cohesion: 0.40
@@ -494,77 +482,69 @@ Nodes (3): Catalog, Database catalog, Query speed
 Cohesion: 0.50
 Nodes (3): graft, npx, @nanonets/graft
 
-### Community 112 - "db_dialects/__init__.py"
-Cohesion: 0.33
-Nodes (13): parse_table_name(), connect(), get_dialect(), list_columns(), list_objects(), list_tables(), parse_table_name_for_engine(), Any (+5 more)
+### Community 86 - "connector_meta"
+Cohesion: 0.22
+Nodes (10): connector_meta(), provider_default_base_url(), provider_default_token_env(), provider_label(), Descriptor of one connector; {} when the id is unknown., Vendor endpoint of a connector that owns one; '' means the user supplies it., Env var an unset connector falls back to when no key is stored in config., Human-facing connector name, for status text; falls back to the raw id. (+2 more)
 
-### Community 126 - "sql_execute.py"
-Cohesion: 0.31
-Nodes (13): BaseException, get_sql_settings(), _allowlisted_names(), _dbg(), _exception_text(), execute_select(), extract_sql(), _is_communication_link_failure() (+5 more)
+### Community 87 - "Armin WebUI Curations & Design Guidelines"
+Cohesion: 0.22
+Nodes (8): 1. Skill Activation & Scope, 2. Theme & Typography, 3. Layout & Navigation, 4. UI Components, 5. Modals & Animations, 6. Views, Settings & Templates, 7. Directory References Summary, Armin WebUI Curations & Design Guidelines
 
-### Community 127 - "postgresql.py"
-Cohesion: 0.37
-Nodes (13): connect(), default_schema(), fqn(), list_columns(), list_objects(), list_tables(), Any, quote_ident() (+5 more)
+### Community 89 - "web_search_enabled"
+Cohesion: 0.25
+Nodes (8): Web search is off while the web-searcher sub-agent is disabled. The tool list…, web_search_enabled(), active_tools(), _prompt_looks_persian(), Tools the model may call right now. `search_web` disappears while web-searcher…, _report_length_hint(), _result_language(), _tool_contract_suffix()
 
-### Community 128 - "_SqlServerConnection"
-Cohesion: 0.18
-Nodes (5): pyodbc connection whose close() cannot mask a prior ODBC error., _SqlServerConnection, _ensure_sqlserver_top(), Cap a SQL Server SELECT so the database does not stream an unbounded result., SqlExecuteTests
+### Community 91 - "armin-dev-policies/SKILL.md"
+Cohesion: 0.29
+Nodes (6): 1. Code Quality & Architecture, 2. Modification & Refactoring Integrity, 3. Execution & UI Verification, 4. Database Standards & Query Safety, 5. Security & Permission Management, 6. Tooling, Research & Communication Protocol
 
-### Community 129 - "sqlite.py"
-Cohesion: 0.37
-Nodes (11): connect(), default_schema(), fqn(), list_columns(), list_objects(), list_tables(), Any, quote_ident() (+3 more)
+### Community 94 - "Constraints"
+Cohesion: 0.29
+Nodes (6): Answer the question, not the table, Constraints, gather-data, Make the database do the work, Persian runs, Spend few queries, learn from each
+
+### Community 95 - "ensure_config_exists"
+Cohesion: 0.83
+Nodes (4): _config_path(), ensure_config_exists(), _example_path(), Path
+
+### Community 108 - "Constraints"
+Cohesion: 0.29
+Nodes (6): Answer the question, not the table, Constraints, gather-data, Make the database do the work, Persian runs, Spend few queries, learn from each
 
 ### Community 130 - "calendar_hint_for_prompt"
 Cohesion: 0.24
 Nodes (10): date, calendar_hint_for_prompt(), _first_jalali_month_year(), _first_jalali_year(), jalali_month_gregorian_bounds(), jalali_to_gregorian(), Jalali (Iranian) calendar helpers for SQL prompts., Convert a Jalali date to Gregorian (year, month, day). (+2 more)
 
-### Community 131 - "ensure_pyodbc_installed"
-Cohesion: 0.24
-Nodes (7): AppConfig, ApiConfig, _require_pyodbc(), ensure_pyodbc_installed(), _has_published_pyodbc_wheel(), Any, Install required Python packages into the running interpreter when missing.
+### Community 131 - "org.py"
+Cohesion: 0.18
+Nodes (20): AppConfig, ApiConfig, ensure_pyodbc_installed(), _has_published_pyodbc_wheel(), Any, Install required Python packages into the running interpreter when missing., create_user(), delete_user() (+12 more)
 
 ### Community 132 - "helix-cli/package.json"
 Cohesion: 0.20
 Nodes (9): bin, helix, description, engines, node, name, private, type (+1 more)
 
-### Community 133 - "app-lifecycle-cli/SKILL.md"
-Cohesion: 0.25
-Nodes (7): Commands, Docker mode (no service, no AppData install), Inputs (infer, don't ask unless unknowable), Native mode, Registration, Rules, Verify, then report alias, mode, paths, port, uninstall
-
-### Community 134 - "web_search_enabled"
-Cohesion: 0.25
-Nodes (8): Web search is off while the web-searcher sub-agent is disabled. The tool list…, web_search_enabled(), active_tools(), _prompt_looks_persian(), Tools the model may call right now. `search_web` disappears while web-searcher…, _report_length_hint(), _result_language(), _tool_contract_suffix()
-
-### Community 135 - "AgentScopedMarkdownPage.jsx"
-Cohesion: 0.70
-Nodes (3): AgentScopedMarkdownPage(), inline(), renderMarkdownToHtml()
-
-### Community 136 - "ensure_config_exists"
-Cohesion: 0.83
-Nodes (4): _config_path(), ensure_config_exists(), _example_path(), Path
-
-### Community 137 - "fetch_openrouter_models"
-Cohesion: 0.67
-Nodes (3): _catalog_with_auto(), fetch_openrouter_models(), Fetch the LLM model catalog from {base_url}/models (cached ~10 minutes).…
+### Community 133 - "App CLI Manager Skill"
+Cohesion: 0.33
+Nodes (5): App CLI Manager Skill, Command Specifications, Directives, Execution Workflow, OS-Based Only (Non-Docker)
 
 ## Knowledge Gaps
-- **885 isolated node(s):** `npx`, `@nanonets/graft`, `_FlowCompiler`, `entrypoint.sh script`, `name` (+880 more)
+- **897 isolated node(s):** `npx`, `@nanonets/graft`, `_FlowCompiler`, `entrypoint.sh script`, `name` (+892 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **31 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **21 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `select_rag_context()` connect `select_rag_context` to `markdown_store.py`, `pipeline_langgraph.py`, `tests.py`?**
+- **Why does `save_config()` connect `save_config` to `get_database_settings`, `org.py`, `pipeline_graph.py`, `tests.py`, `config_loader.py`, `sample_database.py`, `ensure_config_exists`?**
   _High betweenness centrality (0.007) - this node is a cross-community bridge._
-- **Why does `useI18n()` connect `useI18n` to `ResultsPage.jsx`, `AgentScopedMarkdownPage.jsx`, `pipelineFlow.js`, `I18nContext.jsx`, `AgentsPage.jsx`, `LogsPage.jsx`, `SettingsPage.jsx`, `Layout.jsx`?**
-  _High betweenness centrality (0.007) - this node is a cross-community bridge._
+- **Why does `useI18n()` connect `useI18n` to `client.js`, `ResultsPage.jsx`, `Layout.jsx`, `pipelineFlow.js`, `LogsPage.jsx`, `SettingsPage.jsx`, `I18nContext.jsx`?**
+  _High betweenness centrality (0.006) - this node is a cross-community bridge._
 - **What connects `npx`, `@nanonets/graft`, `_FlowCompiler` to the rest of the system?**
-  _885 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _897 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Database catalog` be split into smaller, more focused modules?**
   _Cohesion score 0.004106776180698152 - nodes in this community are weakly interconnected._
 - **Should `markdown_store.py` be split into smaller, more focused modules?**
-  _Cohesion score 0.053312008529921365 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05806205977536646 - nodes in this community are weakly interconnected._
 - **Should `views.py` be split into smaller, more focused modules?**
-  _Cohesion score 0.11574074074074074 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.1251388374676046 - nodes in this community are weakly interconnected._
 - **Should `client.js` be split into smaller, more focused modules?**
-  _Cohesion score 0.06050228310502283 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06521739130434782 - nodes in this community are weakly interconnected._

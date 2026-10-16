@@ -5,18 +5,14 @@ import { testOpenRouterChat } from "../api/client.js";
 import { useI18n } from "../context/I18nContext.jsx";
 import { translateKnownMessage } from "../i18n/apiErrors.js";
 
-export default function LlmChatTester({ models = [], defaultModel, orForm }) {
+export default function LlmChatTester({ models = [], orForm }) {
   const { t } = useI18n();
   const [messages, setMessages] = useState([]); // {role, content, meta}
   const [input, setInput] = useState("");
-  const [model, setModel] = useState(defaultModel || "");
+  const [model, setModel] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const listRef = useRef(null);
-
-  useEffect(() => {
-    if (defaultModel) setModel(defaultModel);
-  }, [defaultModel]);
 
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
@@ -56,7 +52,6 @@ export default function LlmChatTester({ models = [], defaultModel, orForm }) {
   }
 
   const provider = orForm?.base_url || "";
-  const workspace = orForm?.workspace || "";
   const tokenConfigured = orForm?.token_configured;
 
   return (
@@ -71,18 +66,16 @@ export default function LlmChatTester({ models = [], defaultModel, orForm }) {
         <div className="rounded-xl border border-line bg-paper px-3 py-2">
           <p className="font-medium text-muted flex items-center gap-1.5"><Database className="size-3" /> Base URL</p>
           <p className="mt-1 break-all font-mono text-ink">{provider || "—"}</p>
-          {workspace ? <p className="mt-1 text-muted">workspace: <span className="font-mono text-ink">{workspace}</span></p> : null}
           <p className="mt-1 text-muted">API key: {tokenConfigured ? "configured" : "not set"}</p>
         </div>
         <div className="rounded-xl border border-line bg-paper px-3 py-2">
           <label htmlFor="tester-model" className="font-medium text-muted flex items-center gap-1.5"><Cpu className="size-3" /> Model</label>
           <select id="tester-model" value={model} onChange={(e) => setModel(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-fog/40 px-2 py-1.5 text-sm outline-none focus:border-moss focus:ring-1 focus:ring-moss/30">
-            <option value="">{defaultModel || "auto"}</option>
+            <option value="">auto</option>
             {(models || []).slice(0, 100).map((m) => (
               <option key={m.id} value={m.id}>{m.id}</option>
             ))}
           </select>
-          <p className="mt-1 text-muted">Default: <span className="font-mono text-ink">{defaultModel || "auto"}</span></p>
         </div>
       </div>
 

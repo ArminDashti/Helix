@@ -10,10 +10,6 @@ services:
       PYTHONUNBUFFERED: "1"
       # Windows Docker bind mounts often miss native FS events.
       WATCHFILES_FORCE_POLLING: "true"
-      CURSOR_AGENT_BIN: ${CURSOR_AGENT_BIN:-cursor-agent}
-      CURSOR_AUTH_FILE: ${CURSOR_AUTH_FILE:-/run/cursor-auth/auth.json}
-      HOST_WORKSPACE_ROOT: ${HOST_WORKSPACE_ROOT:-C:/Users}
-      HOST_WORKSPACE_MOUNT: ${HOST_WORKSPACE_MOUNT:-/host}
     entrypoint: []
     command:
       - sh
@@ -22,5 +18,3 @@ services:
     volumes:
       - .:/app
       - helix-sqlite-data:/app/backend/data
-      - ${HOST_WORKSPACE_ROOT:-C:/Users}:${HOST_WORKSPACE_MOUNT:-/host}
-      - ${HOST_CURSOR_AUTH_FILE:-C:/Users/armin/AppData/Roaming/Cursor/auth.json}:/run/cursor-auth/auth.json:ro

@@ -1,9 +1,9 @@
 ---
-name: Gather data
+name: gather-data
 description: Resolve the ask, plan one cheap bounded SELECT, run it once, then hand off goals + what_was_done
 ---
 
-# Gather data
+# gather-data
 
 1. Resolve the ask: when `db_intent.found`, gather for the resolved prompt and say so in `what_was_done`; otherwise use the prompt as given.
 2. Look up before you write SQL: read the live catalog, the Overview of each candidate table in Table docs, and the retrieved knowledge notes. From them pick the grain (what one row means), the driving table, the join keys, and the single most selective filter on a column the user named.
