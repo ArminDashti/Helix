@@ -251,44 +251,6 @@ export async function deleteReference(name) {
   try { notifyMutation(path, "DELETE"); } catch {}
 }
 
-export async function fetchRules() {
-  const data = await requestJson("/api/rules/");
-  return data.rules;
-}
-
-export async function createRule(id, { content = "", agents = [], name = "", disabled = false } = {}) {
-  return requestJson("/api/rules/", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, content, agents, name, disabled }),
-  });
-}
-
-export async function updateRule(id, { content, agents, name, disabled }) {
-  return requestJson(`/api/rules/${encodeURIComponent(id)}/`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content, agents, name, disabled }),
-  });
-}
-
-export async function renameRule(id, newId) {
-  return requestJson(`/api/rules/${encodeURIComponent(id)}/rename/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ new_id: newId }),
-  });
-}
-
-export async function deleteRule(id) {
-  const path = `/api/rules/${encodeURIComponent(id)}/`;
-  const res = await apiFetch(path, { method: "DELETE" });
-  if (!res.ok && res.status !== 204) {
-    await parseJson(res, path);
-  }
-  try { notifyMutation(path, "DELETE"); } catch {}
-}
-
 export async function fetchSkills(scope) {
   const qs = scope ? `?scope=${encodeURIComponent(scope)}` : "";
   const data = await requestJson(`/api/skills/${qs}`);
@@ -339,14 +301,6 @@ export async function deleteSkill(scope, id) {
     await parseJson(res, path);
   }
   try { notifyMutation(path, "DELETE"); } catch {}
-}
-
-export async function saveRuleAssignments(assignments) {
-  return requestJson("/api/rules/assignments/", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ assignments }),
-  });
 }
 
 export async function fetchSkillAssignments() {
@@ -714,6 +668,22 @@ export async function toggleMcp(name, enabled) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, enabled }),
+  });
+}
+
+export async function importMcps(config) {
+  return requestJson("/api/mcp/import/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ config }),
+  });
+}
+
+export async function deleteMcp(name) {
+  return requestJson("/api/mcp/delete/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
   });
 }
 

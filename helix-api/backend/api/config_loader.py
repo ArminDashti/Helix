@@ -1363,7 +1363,6 @@ def delete_custom_agent(agent_id: str) -> None:
 
     from . import markdown_store as store
 
-    store.save_assignments(store.load_assignments())
     store.save_skill_assignments(store.load_skill_assignments())
 
 

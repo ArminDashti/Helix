@@ -2,8 +2,6 @@
 id: researcher
 name: researcher
 description: Read the live catalog and run one bounded SELECT against the configured database
-rules:
-  - database-sql
 skills:
   - gather-data
 ---

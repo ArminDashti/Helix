@@ -9,19 +9,15 @@ import AgentAssignmentsPage from "./pages/AgentAssignmentsPage.jsx";
 import AgentsPage from "./pages/AgentsPage.jsx";
 import AnalysisPage from "./pages/AnalysisPage.jsx";
 import DbExplorerPage from "./pages/DbExplorerPage.jsx";
-import DocsPage from "./pages/DocsPage.jsx";
 import EditAgentPage from "./pages/EditAgentPage.jsx";
-import EditRulePage from "./pages/EditRulePage.jsx";
 import EditSkillPage from "./pages/EditSkillPage.jsx";
 import NewAgentPage from "./pages/NewAgentPage.jsx";
-import NewRulePage from "./pages/NewRulePage.jsx";
 import NewSkillPage from "./pages/NewSkillPage.jsx";
 import CanvasPage from "./pages/CanvasPage.jsx";
 import ResultsPage from "./pages/ResultsPage.jsx";
 import LogsPage from "./pages/LogsPage.jsx";
 import McpPage from "./pages/McpPage.jsx";
-import RagPage from "./pages/RagPage.jsx";
-import RulesPage from "./pages/RulesPage.jsx";
+import KnowledgePage from "./pages/KnowledgePage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import SkillsPage from "./pages/SkillsPage.jsx";
 
@@ -43,9 +39,6 @@ export default function App() {
             <Route path="logs" element={<LogsPage />} />
             <Route path="logs/:logId" element={<LogsPage />} />
             <Route path="run" element={<Navigate to="/" replace />} />
-            <Route path="rules" element={<RulesPage />} />
-            <Route path="rules/new" element={<NewRulePage />} />
-            <Route path="rules/:ruleId" element={<EditRulePage />} />
             <Route path="skills" element={<SkillsPage />} />
             <Route path="skills/new" element={<NewSkillPage />} />
             <Route path="skills/:scope/:skillId" element={<EditSkillPage />} />
@@ -53,14 +46,14 @@ export default function App() {
             <Route path="agents/new" element={<NewAgentPage />} />
             <Route path="agents/:agentId/assignments" element={<AgentAssignmentsPage />} />
             <Route path="agents/:agentId" element={<EditAgentPage />} />
-            <Route path="docs" element={<DocsPage />} />
-            <Route path="rag" element={<RagPage />} />
+            <Route path="knowledge" element={<KnowledgePage />} />
+            <Route path="docs" element={<Navigate to="/knowledge?tab=tables" replace />} />
+            <Route path="rag" element={<Navigate to="/knowledge?tab=rag" replace />} />
             <Route path="mcp" element={<McpPage />} />
             <Route path="db-explorer" element={<DbExplorerPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="admin" element={<AdminPage />} />
             <Route path="about-me" element={<AboutMePage />} />
-            <Route path="instructions" element={<Navigate to="/rules" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

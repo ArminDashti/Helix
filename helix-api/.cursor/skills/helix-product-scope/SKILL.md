@@ -63,7 +63,7 @@ metadata:
 **Example 5** — Stale markdown
 
 - Input: "Update output-contract for grid."
-- Output: edit `backend/analytics/agents/_shared/rules/01-output-contract.md` and `backend/markdown-files/rules/output-contract.md`.
+- Output: edit the agent skill files under `backend/analytics/agents/<agent>/skills/` and `backend/markdown-files/skills/<agent>/`.
 
 **Example 6** — EXEC
 

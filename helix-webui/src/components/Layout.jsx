@@ -3,21 +3,14 @@ import { NavLink, Outlet } from "react-router-dom";
 import {
   BarChart3,
   Bot,
-  Brain,
+  BookOpen,
   Database,
   LayoutTemplate,
-  Monitor,
-  Moon,
   Play,
   Plug,
-  Scale,
-  ScrollText,
   Settings,
   Shield,
   Sparkles,
-  Sun,
-  Table2,
-  User,
 } from "lucide-react";
 import { useApiStatus } from "../context/ApiStatusContext.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
@@ -26,12 +19,6 @@ import { assetUrl } from "../utils/assetUrl.js";
 import pkg from "../../package.json";
 
 const THEME_STORAGE_KEY = "helix-theme";
-
-const THEME_OPTIONS = [
-  { value: "light", labelKey: "layout.theme.light", icon: Sun },
-  { value: "dark", labelKey: "layout.theme.dark", icon: Moon },
-  { value: "system", labelKey: "layout.theme.system", icon: Monitor },
-];
 
 function isConnectedStatus(status) {
   return status === "connected" || status === "configured";
@@ -111,7 +98,7 @@ function NavItem({ link }) {
 
 export default function Layout() {
   const { health, checking } = useApiStatus();
-  const { t, locale, setLocale } = useI18n();
+  const { t } = useI18n();
   const [theme, setTheme] = useState(readThemePreference);
   const [branding, setBranding] = useState({
     company_name: "",
@@ -122,11 +109,9 @@ export default function Layout() {
     { to: "/", label: t("nav.analysis"), icon: BarChart3, end: true },
     { to: "/results", label: t("nav.results"), icon: Play },
     { to: "/canvas", label: t("nav.canvas"), icon: LayoutTemplate },
-    { to: "/rules", label: t("nav.rules"), icon: Scale },
     { to: "/skills", label: t("nav.skills"), icon: Sparkles },
     { to: "/agents", label: t("nav.agents"), icon: Bot },
-    { to: "/docs", label: t("nav.tableDocs"), icon: Table2 },
-    { to: "/rag", label: t("nav.rag"), icon: Brain },
+    { to: "/knowledge", label: t("nav.knowledge"), icon: BookOpen },
     { to: "/mcp", label: t("nav.mcp"), icon: Plug },
     { to: "/db-explorer", label: t("nav.dbExplorer"), icon: Database },
   ];
@@ -134,8 +119,6 @@ export default function Layout() {
   const footerLinks = [
     { to: "/admin", label: t("nav.admin"), icon: Shield },
     { to: "/settings", label: t("nav.settings"), icon: Settings },
-    { to: "/logs", label: t("nav.logs"), icon: ScrollText },
-    { to: "/about-me", label: t("nav.aboutMe"), icon: User },
   ];
 
   useEffect(() => {
@@ -269,64 +252,6 @@ export default function Layout() {
             </span>
           </NavLink>
 
-          <div
-            className="flex flex-row gap-1 rounded-xl border border-line/80 bg-fog/40 p-1"
-            role="group"
-            aria-label={t("layout.languageAria")}
-          >
-            {[
-              { value: "en", label: t("layout.languageEn") },
-              { value: "fa", label: t("layout.languageFa") },
-            ].map((opt) => {
-              const active = locale === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setLocale(opt.value)}
-                  title={opt.label}
-                  aria-label={opt.label}
-                  aria-pressed={active}
-                  className={[
-                    "flex flex-1 items-center justify-center rounded-lg py-1.5 text-xs font-semibold transition",
-                    "px-2",
-                    active ? "bg-moss text-white" : "text-ink hover:bg-fog",
-                  ].join(" ")}
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div
-            className="flex flex-row gap-1 rounded-xl border border-line/80 bg-fog/40 p-1"
-            role="group"
-            aria-label={t("layout.themeAria")}
-          >
-            {THEME_OPTIONS.map((opt) => {
-              const Icon = opt.icon;
-              const active = theme === opt.value;
-              const label = t(opt.labelKey);
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setTheme(opt.value)}
-                  title={label}
-                  aria-label={label}
-                  aria-pressed={active}
-                  className={[
-                    "flex flex-1 items-center justify-center rounded-lg py-1.5 transition",
-                    "px-2",
-                    active ? "bg-moss text-white" : "text-ink hover:bg-fog",
-                  ].join(" ")}
-                >
-                  <Icon className="size-4" aria-hidden="true" />
-                </button>
-              );
-            })}
-          </div>
           <p className="rounded-xl border border-line/80 bg-fog/40 px-2 py-1.5 text-center text-sm leading-snug text-muted">
             {t("layout.credit")}
             <span className="mt-0.5 block text-xs opacity-80">
@@ -337,7 +262,7 @@ export default function Layout() {
       </nav>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto p-2 sm:p-3">
         <div className="flex min-h-0 flex-1 flex-col">
-          <Outlet />
+          <Outlet context={{ theme, setTheme }} />
         </div>
       </main>
     </div>

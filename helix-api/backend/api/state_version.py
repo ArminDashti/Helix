@@ -63,18 +63,17 @@ def collect_resource_versions() -> dict[str, str]:
     resources: dict[str, str] = {}
     resources["results"] = _stat_sig(md_root / "results.json")
     resources["logs"] = _stat_sig(md_root / "logs.json")
-    resources["rules"] = _dir_sig([md_root / "rules"], "*.md")
     resources["skills"] = _dir_sig([md_root / "skills"], "**/*.md")
     resources["references"] = _dir_sig([md_root / "references"], "*.md")
     resources["rag"] = _dir_sig([md_root / "rag"], "*.md")
     resources["instructions"] = _dir_sig([md_root / "instructions"], "*.md")
-    resources["assignments"] = _stat_sig(md_root / "rule-assignments.json") + "|" + _stat_sig(md_root / "skill-assignments.json")
+    resources["assignments"] = _stat_sig(md_root / "skill-assignments.json")
     resources["config"] = _stat_sig(cfg_path)
     resources["branding"] = _dir_sig([md_root / "branding"], "*")
     # pipeline_graph lives inside config, so covered by config sig, but expose separately for convenience (same sig)
     resources["pipeline_graph"] = resources["config"]
-    # docs catalog is derived from DB introspection + markdown tables — not file-backed; use config+rules sig as proxy
-    resources["docs"] = _dir_sig([md_root / "docs"], "**/*") if (md_root / "docs").exists() else resources["rules"]
+    # docs catalog is derived from DB introspection + markdown tables — not file-backed; use config+skills sig as proxy
+    resources["docs"] = _dir_sig([md_root / "docs"], "**/*") if (md_root / "docs").exists() else resources["skills"]
     # database settings also in config
     resources["database"] = resources["config"]
     # agents definitions: analytics/agents + markdown_files/instructions

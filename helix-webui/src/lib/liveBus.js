@@ -82,7 +82,6 @@ export function subscribeAny(fn) {
 // Map API path -> resource key(s) for optimistic broadcast after mutations
 const PATH_RESOURCE = [
   [/\/api\/agents\//, "agents"],
-  [/\/api\/rules\//, "rules"],
   [/\/api\/skills\//, "skills"],
   [/\/api\/references\//, "references"],
   [/\/api\/rag\//, "rag"],

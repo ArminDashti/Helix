@@ -41,7 +41,7 @@
           <li><span class="num">۴</span><a href="#llm">مدل زبانی</a></li>
           <li><span class="num">۵</span><a href="#database">پایگاه داده</a></li>
           <li><span class="num">۶</span><a href="#users">مدیریت کاربران</a></li>
-          <li><span class="num">۷</span><a href="#rules-skills">قوانین و مهارت‌ها</a></li>
+          <li><span class="num">۷</span><a href="#skills">مهارت‌ها</a></li>
           <li><span class="num">۸</span><a href="#agents">عامل‌ها و خط لوله</a></li>
           <li><span class="num">۹</span><a href="#table-docs">مستندات جداول</a></li>
           <li><span class="num">۱۰</span><a href="#db-explorer">کاوشگر پایگاه داده</a></li>
@@ -303,12 +303,11 @@ npm run dev</pre>
         </p>
       </section>
 
-      <!-- 7. Rules & Skills -->
-      <section id="rules-skills" class="section">
-        <h2>۷. قوانین و مهارت‌ها</h2>
+      <!-- 7. Skills -->
+      <section id="skills" class="section">
+        <h2>۷. مهارت‌ها</h2>
         <p>
-          مسیرها: <span class="route">/rules</span> و
-          <span class="route">/skills</span>
+          مسیر: <span class="route">/skills</span>
         </p>
         <table>
           <thead>
@@ -318,10 +317,6 @@ npm run dev</pre>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td>قوانین (Rules)</td>
-              <td>سیاست‌ها و محدودیت‌های ثابت (مثلاً قرارداد خروجی، امنیت SQL)</td>
-            </tr>
             <tr>
               <td>مهارت‌ها (Skills)</td>
               <td>دستورالعمل‌های عملیاتی و playbook برای وظایف خاص</td>
@@ -336,7 +331,7 @@ npm run dev</pre>
         </ul>
         <div class="callout callout-tip">
           <div class="callout-title">نکته</div>
-          عامل‌ها فقط از قوانین و مهارت‌های تخصیص‌یافته استفاده می‌کنند — فایل
+          عامل‌ها فقط از مهارت‌های تخصیص‌یافته استفاده می‌کنند — فایل
           instruction جداگانه ندارند.
         </div>
       </section>
@@ -347,7 +342,7 @@ npm run dev</pre>
         <p>مسیر: <span class="route">/agents</span></p>
         <h3>سه نما</h3>
         <ul>
-          <li><strong>فهرست</strong> — لیست عامل‌ها با قوانین/مهارت‌ها</li>
+          <li><strong>فهرست</strong> — لیست عامل‌ها با مهارت‌ها</li>
           <li>
             <strong>چینش (Arrange)</strong> — مرحله‌به‌مرحله IF/ELSE/برو به؛
             هر مرحله یک «اگر»
@@ -361,7 +356,7 @@ npm run dev</pre>
           <li>آنگاه: برو به عامل بعدی یا توقف</li>
         </ul>
         <p>
-          می‌توانید عامل سفارشی بسازید (شناسه، نقش، توضیح) و قوانین/مهارت‌ها را
+          می‌توانید عامل سفارشی بسازید (شناسه، نقش، توضیح) و مهارت‌ها را
           از <span class="route">/agents/:id/assignments</span> تخصیص دهید.
         </p>
         <div class="callout callout-warn">

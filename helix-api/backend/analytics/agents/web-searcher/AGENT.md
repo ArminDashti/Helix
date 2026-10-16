@@ -2,8 +2,6 @@
 id: web-searcher
 name: web-searcher
 description: Search the public web when another agent requests external context (sub-agent, disabled by default)
-rules:
-  - web-search-only
 skills:
   - search-web
 disabled: true

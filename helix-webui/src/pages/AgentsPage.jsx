@@ -4,7 +4,6 @@ import { Ban, Bot, LayoutList, ListChecks, ListTree, Network, Pencil, Trash2 } f
 import {
   deleteAgent,
   fetchAgents,
-  fetchRules,
   fetchSkills,
   setAgentDisabled,
 } from "../api/client.js";
@@ -36,7 +35,6 @@ export default function AgentsPage() {
   const location = useLocation();
   const { t, locale } = useI18n();
   const [agents, setAgents] = useState([]);
-  const [rules, setRules] = useState([]);
   const [skills, setSkills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -44,17 +42,15 @@ export default function AgentsPage() {
   const [view, setView] = useState("list");
 
   async function reload() {
-    const [a, r, s] = await Promise.all([
+    const [a, s] = await Promise.all([
       fetchAgents(),
-      fetchRules(),
       fetchSkills(),
     ]);
     setAgents(a || []);
-    setRules(r || []);
     setSkills(s || []);
   }
 
-  useLiveSync(["agents", "rules", "skills"], () => reload().catch(() => {}));
+  useLiveSync(["agents", "skills"], () => reload().catch(() => {}));
   useLiveSync("pipeline_graph", () => reload().catch(() => {}));
   useEffect(() => {
     function onFocusVis() { if (document.visibilityState !== "hidden") reload().catch(() => {}); }
@@ -159,13 +155,6 @@ export default function AgentsPage() {
         agent.description || (
           <span className="text-muted">{t("common.noneDash")}</span>
         ),
-    },
-    {
-      key: "rules",
-      label: t("agents.colRules"),
-      render: (agent) => (
-        <StackedNames items={namesForAgent(agent.id, rules, locale)} />
-      ),
     },
     {
       key: "skills",

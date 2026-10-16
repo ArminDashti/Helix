@@ -232,7 +232,7 @@ def agents_list(request: HttpRequest) -> JsonResponse:
 @csrf_exempt
 @require_http_methods(["GET", "PUT"])
 def agent_instruction(request: HttpRequest, agent_id: str) -> JsonResponse:
-    return _error("Agents use rules and skills only; instructions are removed", 410)
+    return _error("Agents use skills only; instructions are removed", 410)
 
 
 # --- References ---
@@ -344,55 +344,6 @@ def rag_detail(request: HttpRequest, doc_id: str) -> HttpResponse:
         return _error("RAG document not found", 404)
 
 
-# --- Rules ---
-
-
-@csrf_exempt
-@require_http_methods(["GET", "POST"])
-def rules_collection(request: HttpRequest) -> JsonResponse:
-    if request.method == "GET":
-        return JsonResponse({"rules": store.list_rules()})
-    try:
-        body = _json_body(request)
-    except ValueError as exc:
-        return _error(str(exc))
-    rule_id = body.get("id") or ""
-    content = body.get("content", "")
-    agents = body.get("agents")
-    name = body.get("name")
-    disabled = body.get("disabled")
-    if not rule_id:
-        return _error("id is required")
-    try:
-        item = store.create_rule(
-            str(rule_id),
-            content if isinstance(content, str) else "",
-            agents if isinstance(agents, list) else None,
-            name=str(name) if name is not None else None,
-            disabled=bool(disabled),
-        )
-    except ValueError as exc:
-        return _error(str(exc))
-    except FileExistsError:
-        return _error("Rule already exists", 409)
-    return JsonResponse(item, status=201)
-
-
-@csrf_exempt
-@require_http_methods(["GET", "PUT"])
-def rules_assignments(request: HttpRequest) -> JsonResponse:
-    if request.method == "GET":
-        return JsonResponse({"assignments": store.load_assignments()})
-    try:
-        body = _json_body(request)
-    except ValueError as exc:
-        return _error(str(exc))
-    assignments = body.get("assignments")
-    if not isinstance(assignments, dict):
-        return _error("assignments must be an object")
-    saved = store.save_assignments(assignments)
-    return JsonResponse({"assignments": saved})
-
 
 @csrf_exempt
 @require_http_methods(["GET", "PUT"])
@@ -408,39 +359,6 @@ def skills_assignments(request: HttpRequest) -> JsonResponse:
         return _error("assignments must be an object")
     saved = store.save_skill_assignments(assignments)
     return JsonResponse({"assignments": saved})
-
-
-@csrf_exempt
-@require_http_methods(["GET", "PUT", "DELETE"])
-def rule_detail(request: HttpRequest, rule_id: str) -> HttpResponse:
-    try:
-        if request.method == "GET":
-            return JsonResponse(store.get_rule(rule_id))
-        if request.method == "DELETE":
-            store.delete_rule(rule_id)
-            return HttpResponse(status=204)
-        body = _json_body(request)
-        content = body.get("content")
-        agents = body.get("agents")
-        name = body.get("name")
-        disabled = body.get("disabled")
-        if content is not None and not isinstance(content, str):
-            return _error("content must be a string")
-        if agents is not None and not isinstance(agents, list):
-            return _error("agents must be a list")
-        return JsonResponse(
-            store.update_rule(
-                rule_id,
-                content=content,
-                agents=agents,
-                name=str(name) if name is not None else None,
-                disabled=None if disabled is None else bool(disabled),
-            )
-        )
-    except ValueError as exc:
-        return _error(str(exc))
-    except FileNotFoundError:
-        return _error("Rule not found", 404)
 
 
 # --- Skills ---
@@ -685,27 +603,6 @@ def agent_rename(request: HttpRequest, agent_id: str) -> JsonResponse:
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def rule_rename(request: HttpRequest, rule_id: str) -> JsonResponse:
-    try:
-        body = _json_body(request)
-    except ValueError as exc:
-        return _error(str(exc))
-    new_id = body.get("new_id") or body.get("name") or ""
-    if not new_id:
-        return _error("new_id is required")
-    try:
-        item = store.rename_rule(rule_id, str(new_id))
-    except ValueError as exc:
-        return _error(str(exc))
-    except FileNotFoundError:
-        return _error("Rule not found", 404)
-    except FileExistsError:
-        return _error("A rule with that id already exists", 409)
-    return JsonResponse(item)
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
 def skill_rename(request: HttpRequest, scope: str, skill_id: str) -> JsonResponse:
     try:
         body = _json_body(request)
@@ -833,6 +730,45 @@ def mcp_toggle(request: HttpRequest) -> JsonResponse:
         return JsonResponse(mcp_config.set_enabled(name.strip(), enabled))
     except ValueError as exc:
         return _error(str(exc))
+    except FileNotFoundError as exc:
+        return _error(str(exc), 404)
+    except OSError as exc:
+        return _error(str(exc), 500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def mcp_import(request: HttpRequest) -> JsonResponse:
+    """Merge MCP server definitions (Cursor mcpServers JSON) into mcp.json."""
+    try:
+        body = _json_body(request)
+    except Exception:  # noqa: BLE001 — malformed JSON body
+        return _error("invalid JSON body")
+    try:
+        return JsonResponse(mcp_config.import_servers(body.get("config")))
+    except ValueError as exc:
+        return _error(str(exc))
+    except FileNotFoundError as exc:
+        return _error(str(exc), 404)
+    except OSError as exc:
+        return _error(str(exc), 500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def mcp_delete(request: HttpRequest) -> JsonResponse:
+    """Remove one MCP server entry from mcp.json."""
+    try:
+        body = _json_body(request)
+    except Exception:  # noqa: BLE001 — malformed JSON body
+        return _error("invalid JSON body")
+    name = body.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return _error("name must be a non-empty string")
+    try:
+        return JsonResponse(mcp_config.delete_server(name.strip()))
+    except ValueError as exc:
+        return _error(str(exc), 404 if str(exc).startswith("unknown") else 400)
     except FileNotFoundError as exc:
         return _error(str(exc), 404)
     except OSError as exc:

@@ -53,3 +53,11 @@ Full rules: LEAN-CTX.md (open on demand — do not auto-load).
 ## Learned User Preferences
 
 - Cursor headless CLI (`cursor_headless_cli` / `agent -p`) must always run in Agent mode — never ask or plan.
+- When asked to remove a feature, delete all of its code, files, routes, and i18n keys completely; leave no dead code.
+
+## Learned Workspace Facts
+
+- Helix is two apps: `helix-api` (Django backend) and `helix-webui` (React + Vite frontend).
+- Local Docker stack project is `helix` (`helix-api/docker-compose.local.yml`) with containers `helix-api` and `helix-webui`.
+- Local update is `scripts/install-local-docker.ps1` (rebuild, recreate, keep volumes); `reinstall.ps1` is only for full reinstalls.
+- The `helix` CLI command is `rebuild`, not `reinstall`.

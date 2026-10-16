@@ -391,13 +391,12 @@ class FourAgentPipelineTests(SimpleTestCase):
                 {"name": "base-instruction", "content": "# base"},
             ]
             with patch("api.db_dialects.list_tables", return_value=[{"schema": "Sales", "name": "Moshtary", "full_name": "Sales.Moshtary"}]):
-                with patch.object(store, "list_rules", return_value=[]):
-                    with patch.object(store, "list_skills", return_value=[]):
-                        with patch(
-                            "api.docs_catalog.format_live_catalog_for_prompt",
-                            return_value="### Sales.Moshtary\nColumns: ccMoshtary, NameMoshtary",
-                        ):
-                            prompt = store.assemble_agent_prompt("orchester")
+                with patch.object(store, "list_skills", return_value=[]):
+                    with patch(
+                        "api.docs_catalog.format_live_catalog_for_prompt",
+                        return_value="### Sales.Moshtary\nColumns: ccMoshtary, NameMoshtary",
+                    ):
+                        prompt = store.assemble_agent_prompt("orchester")
         self.assertIn("## References", prompt)
         self.assertIn("base-instruction", prompt)
         self.assertIn("## Live catalog", prompt)
@@ -405,39 +404,34 @@ class FourAgentPipelineTests(SimpleTestCase):
 
 
 class AgentAssetContractTests(SimpleTestCase):
-    """One rule and one skill per agent, catalog-agnostic text, web search gated by config."""
+    """One skill per agent, catalog-agnostic text, web search gated by config."""
 
-    def test_every_agent_has_exactly_one_rule_and_one_skill(self):
+    def test_every_agent_has_exactly_one_skill(self):
         from . import markdown_store as store
         from .agents import SYNC_AGENT_IDS
 
         self.assertEqual(store.agent_asset_issues(), [])
-        rules = store.list_rules()
         skills = store.list_skills()
         for agent_id in SYNC_AGENT_IDS:
-            owned_rules = [rule["id"] for rule in rules if agent_id in (rule["agents"] or [])]
             owned_skills = [skill["id"] for skill in skills if agent_id in (skill["agents"] or [])]
-            self.assertEqual(len(owned_rules), 1, f"{agent_id}: {owned_rules}")
             self.assertEqual(len(owned_skills), 1, f"{agent_id}: {owned_skills}")
 
-    def test_agent_prompt_carries_one_rule_and_one_skill(self):
+    def test_agent_prompt_carries_skills_and_no_rules_section(self):
         from . import markdown_store as store
 
         for agent_id in ("orchester", "guardian", "researcher", "final-approver"):
             prompt = store.assemble_agent_prompt(agent_id, include_warehouse=False)
-            self.assertEqual(prompt.count("\n### "), 2, agent_id)
+            self.assertIn("## Skills", prompt, agent_id)
+            self.assertNotIn("## Rules", prompt, agent_id)
 
-    def test_rules_and_skills_name_no_specific_catalog(self):
+    def test_skills_name_no_specific_catalog(self):
         from . import markdown_store as store
 
         banned = ("SalesLT", "AdventureWorks", "MarkazPakhsh", "TarikhFaktor", "DarkhastFaktor")
-        texts = {f"rule {rule['id']}": rule.get("content") or "" for rule in store.list_rules()}
-        texts.update(
-            {
-                f"skill {skill['scope']}/{skill['id']}": skill.get("content") or ""
-                for skill in store.list_skills()
-            }
-        )
+        texts = {
+            f"skill {skill['scope']}/{skill['id']}": skill.get("content") or ""
+            for skill in store.list_skills()
+        }
         for name, text in texts.items():
             for token in banned:
                 self.assertNotIn(token, text, f"{name} hardcodes {token}")
@@ -477,7 +471,6 @@ class AgentAssetContractTests(SimpleTestCase):
         roots = [
             Path(dj_settings.AGENTS_DIR),
             md_root / "instructions",
-            md_root / "rules",
             md_root / "skills",
             md_root / "references",
         ]

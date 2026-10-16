@@ -3,9 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ListChecks, Save } from "lucide-react";
 import {
   fetchAgents,
-  fetchRules,
   fetchSkills,
-  saveRuleAssignments,
   saveSkillAssignments,
 } from "../api/client.js";
 import FlashMessage from "../components/FlashMessage.jsx";
@@ -37,9 +35,7 @@ export default function AgentAssignmentsPage() {
   const navigate = useNavigate();
   const { t, locale } = useI18n();
   const [agent, setAgent] = useState(null);
-  const [rules, setRules] = useState([]);
   const [skills, setSkills] = useState([]);
-  const [selectedRuleIds, setSelectedRuleIds] = useState([]);
   const [selectedSkillKeys, setSelectedSkillKeys] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -50,9 +46,8 @@ export default function AgentAssignmentsPage() {
     let cancelled = false;
     (async () => {
       try {
-        const [agentList, ruleList, skillList] = await Promise.all([
+        const [agentList, skillList] = await Promise.all([
           fetchAgents(),
-          fetchRules(),
           fetchSkills(),
         ]);
         if (cancelled) return;
@@ -61,16 +56,9 @@ export default function AgentAssignmentsPage() {
           setError(t("agents.notFound"));
           return;
         }
-        const nextRules = ruleList || [];
         const nextSkills = skillList || [];
         setAgent(found);
-        setRules(nextRules);
         setSkills(nextSkills);
-        setSelectedRuleIds(
-          nextRules
-            .filter((rule) => (rule.agents || []).includes(agentId))
-            .map((rule) => rule.id),
-        );
         setSelectedSkillKeys(
           nextSkills
             .filter((skill) => (skill.agents || []).includes(agentId))
@@ -93,20 +81,6 @@ export default function AgentAssignmentsPage() {
     };
   }, [agentId, t]);
 
-  const ruleItems = useMemo(
-    () =>
-      sortByLabel(
-        rules.map((rule) => ({
-          id: rule.id,
-          label: rule.name || rule.id,
-          subtitle: rule.id,
-        })),
-        (item) => item.label,
-        locale,
-      ),
-    [rules, locale],
-  );
-
   const skillItems = useMemo(
     () =>
       sortByLabel(
@@ -127,14 +101,9 @@ export default function AgentAssignmentsPage() {
     setSaving(true);
     setError(null);
     try {
-      await Promise.all([
-        saveRuleAssignments(
-          mapWithAgent(rules, selectedRuleIds, agent.id, (rule) => rule.id),
-        ),
-        saveSkillAssignments(
-          mapWithAgent(skills, selectedSkillKeys, agent.id, skillAssignKey),
-        ),
-      ]);
+      await saveSkillAssignments(
+        mapWithAgent(skills, selectedSkillKeys, agent.id, skillAssignKey),
+      );
       const savedMsg = t("assignments.saved");
       setStatus(savedMsg);
       navigate("/agents", { state: { status: savedMsg } });
@@ -184,13 +153,6 @@ export default function AgentAssignmentsPage() {
       ) : null}
       <FlashMessage message={status ? translateKnownMessage(t, status) : status} />
       <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto rounded-2xl border border-line/80 bg-paper/80 p-4 md:grid-cols-2">
-        <ItemAssignmentPicker
-          legend={t("assignments.legendRules")}
-          items={ruleItems}
-          selectedIds={selectedRuleIds}
-          onChange={setSelectedRuleIds}
-          emptyLabel={t("common.noRules")}
-        />
         <ItemAssignmentPicker
           legend={t("assignments.legendSkills")}
           items={skillItems}

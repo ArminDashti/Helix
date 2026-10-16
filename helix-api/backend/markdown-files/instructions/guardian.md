@@ -2,8 +2,6 @@
 id: guardian
 name: guardian
 description: Gate the prompt before any database work
-rules:
-  - guard-prompt
 skills:
   - guard-prompt
 ---

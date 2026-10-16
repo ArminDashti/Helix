@@ -17,42 +17,6 @@ from .token_usage import estimate_tokens
 logger = logging.getLogger(__name__)
 
 SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}$")
-_NUMERIC_PREFIX_RE = re.compile(r"^\d+[-_]")
-
-RULE_ID_MIGRATION = {
-    "shared-00-security": "security",
-    "shared-01-output-contract": "output-contract",
-    "shared-02-base-behavior": "base-behavior",
-    "shared-03-product-scope": "product-scope",
-    "task_validator-10-feasibility": "feasibility",
-    "solution_strategist-10-non-technical": "non-technical",
-    "technical_architect-10-blueprint": "blueprint",
-    "code_builder-10-implement": "implement",
-    "sql_guardian-10-select-only": "select-only",
-    "implementation_auditor-10-verify-plan": "verify-plan",
-    "response_publisher-10-package-payload": "package-payload",
-}
-
-RULE_DISPLAY_NAMES = {
-    "orchester": "Orchester",
-    "core-behavior": "Core behavior",
-    "output-contract": "Output contract",
-    "database-sql": "Database SQL",
-    "package-payload": "Package payload",
-    "guard-prompt": "Guard prompt",
-    "match-goal": "Match goal",
-    "build-result": "Build result",
-    "conduct-research": "Conduct research",
-    "synthesize-brief": "Synthesize brief",
-    "web-search-only": "Web search only",
-    # Legacy names (migration / old configs)
-    "security": "Security",
-    "base-behavior": "Base behavior",
-    "select-only": "Select only",
-    "product-scope": "Product scope",
-    "fast-query": "Fast query",
-}
-
 SKILL_DISPLAY_NAMES = {
     "orchestrate-pipeline": "Orchestrate pipeline",
     "echarts-response": "ECharts response",
@@ -135,54 +99,8 @@ def _set_md_meta(
     return f"---\n{dumped}\n---\n{rest}"
 
 
-def _strip_numeric_prefix(stem: str) -> str:
-    return _NUMERIC_PREFIX_RE.sub("", stem)
-
-
 def _humanize_id(value: str) -> str:
     return value.replace("-", " ").replace("_", " ").strip().title()
-
-
-def migrate_rule_ids() -> None:
-    """Rename legacy numbered/prefixed rule files and set display names."""
-    ensure_dirs()
-    rules = rules_dir()
-    assignments = None
-    assignments_changed = False
-    if assignments_path().exists():
-        raw = json.loads(assignments_path().read_text(encoding="utf-8") or "{}")
-        assignments = raw if isinstance(raw, dict) else {}
-    else:
-        assignments = {}
-
-    for old_id, new_id in RULE_ID_MIGRATION.items():
-        old_path = rules / f"{old_id}.md"
-        new_path = rules / f"{new_id}.md"
-        if old_path.exists() and not new_path.exists():
-            new_path.write_text(old_path.read_text(encoding="utf-8"), encoding="utf-8")
-            old_path.unlink()
-        if old_id in assignments and new_id not in assignments:
-            assignments[new_id] = assignments.pop(old_id)
-            assignments_changed = True
-        elif old_id in assignments:
-            del assignments[old_id]
-            assignments_changed = True
-
-    for path in sorted(rules.glob("*.md")):
-        wanted = RULE_DISPLAY_NAMES.get(path.stem)
-        if not wanted:
-            continue
-        content = path.read_text(encoding="utf-8")
-        meta = _parse_md_meta(content)
-        if meta["name"] == wanted:
-            continue
-        path.write_text(_set_md_meta(content, name=wanted), encoding="utf-8")
-
-    if assignments_changed:
-        assignments_path().write_text(
-            json.dumps(assignments, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
 
 
 def _iter_skill_files() -> list[tuple[str, Path]]:
@@ -249,23 +167,13 @@ def rag_dir() -> Path:
     return root() / "rag"
 
 
-def rules_dir() -> Path:
-    return root() / "rules"
-
-
-def assignments_path() -> Path:
-    return root() / "rule-assignments.json"
-
-
 def skill_assignments_path() -> Path:
     return root() / "skill-assignments.json"
 
 
 def ensure_dirs() -> None:
-    for path in (instructions_dir(), references_dir(), rag_dir(), rules_dir(), skills_dir()):
+    for path in (instructions_dir(), references_dir(), rag_dir(), skills_dir()):
         path.mkdir(parents=True, exist_ok=True)
-    if not assignments_path().exists():
-        assignments_path().write_text("{}", encoding="utf-8")
     if not skill_assignments_path().exists():
         skill_assignments_path().write_text("{}", encoding="utf-8")
 
@@ -405,10 +313,6 @@ def _parse_agent_md_skill_ids(agent_id: str) -> list[str]:
     return _parse_agent_md_list(agent_id, "skills")
 
 
-def _parse_agent_md_rule_ids(agent_id: str) -> list[str]:
-    return _parse_agent_md_list(agent_id, "rules")
-
-
 def _skill_exists_in_shared(skill_id: str) -> bool:
     runtime = skills_dir() / "shared" / skill_id / "SKILL.md"
     source = _agents_source_dir() / "_shared" / "skills" / skill_id / "SKILL.md"
@@ -430,42 +334,6 @@ def default_skill_assignments() -> dict[str, list[str]]:
             if agent_id not in agents:
                 agents.append(agent_id)
     return inverted
-
-
-def default_rule_assignments() -> dict[str, list[str]]:
-    """Map rule_id → the one agent that owns it (one rule per agent).
-
-    `<agent>/rules/<nn>-<rule>.md` belongs to that agent, and an explicit `rules:` list in
-    `AGENT.md` may name the rule instead. There is no army-wide rule pool: a shared rule would
-    be a second rule for every agent.
-    """
-    agents_root = _agents_source_dir()
-    assignments: dict[str, list[str]] = {}
-    for agent_id in SYNC_AGENT_IDS:
-        stems: list[str] = []
-        rules_folder = agents_root / agent_id / "rules"
-        if rules_folder.is_dir():
-            stems = [
-                _strip_numeric_prefix(rule_file.stem)
-                for rule_file in sorted(rules_folder.glob("*.md"))
-            ]
-        for stem in stems or _parse_agent_md_rule_ids(agent_id):
-            assignments[stem] = [agent_id]
-    return assignments
-
-
-def ensure_default_rule_assignments() -> None:
-    """Fill missing rule → agent rows from the agent army defaults."""
-    ensure_dirs()
-    defaults = default_rule_assignments()
-    current = load_assignments()
-    changed = False
-    for rule_id, agents in defaults.items():
-        if rule_id not in current or not current[rule_id]:
-            current[rule_id] = list(agents)
-            changed = True
-    if changed:
-        save_assignments(current)
 
 
 def ensure_default_skill_assignments() -> None:
@@ -559,36 +427,21 @@ def list_skills(scope: str | None = None) -> list[dict]:
 
 
 def agent_asset_issues() -> list[str]:
-    """Report every agent that breaks the one-rule-and-one-skill contract.
+    """Report every agent that breaks the one-skill-per-agent contract.
 
-    Assignment drift is silent otherwise: an agent with no rule, or a rule reaching three agents,
-    still runs — just without the constraints it is supposed to carry. Called after each sync and
+    Assignment drift is silent otherwise: an agent with no skill, or a skill reaching three agents,
+    still runs â€” just without the procedure it is supposed to follow. Called after each sync and
     asserted in `api.tests`.
     """
     issues: list[str] = []
-    rules = [rule for rule in list_rules() if not rule.get("disabled")]
     skills = [skill for skill in list_skills() if not skill.get("disabled")]
 
     for agent_id in SYNC_AGENT_IDS:
-        owned_rules = [rule["id"] for rule in rules if agent_id in (rule.get("agents") or [])]
         owned_skills = [skill["id"] for skill in skills if agent_id in (skill.get("agents") or [])]
-        if len(owned_rules) != 1:
-            issues.append(
-                f"{agent_id}: expected 1 rule, found {len(owned_rules)} "
-                f"({', '.join(owned_rules) or 'none'})"
-            )
         if len(owned_skills) != 1:
             issues.append(
                 f"{agent_id}: expected 1 skill, found {len(owned_skills)} "
                 f"({', '.join(owned_skills) or 'none'})"
-            )
-
-    for rule in rules:
-        assigned = rule.get("agents") or []
-        if len(assigned) != 1:
-            issues.append(
-                f"rule {rule['id']}: expected 1 agent, found {len(assigned)} "
-                f"({', '.join(assigned) or 'none'})"
             )
     for skill in skills:
         assigned = skill.get("agents") or []
@@ -598,7 +451,6 @@ def agent_asset_issues() -> list[str]:
                 f"({', '.join(assigned) or 'none'})"
             )
     return issues
-
 
 def get_skill(scope: str, skill_id: str) -> dict:
     ensure_dirs()
@@ -693,48 +545,6 @@ def _agents_source_dir() -> Path:
     return Path(settings.AGENTS_DIR)
 
 
-def seed_if_empty() -> None:
-    """Seed rules from analytics/agents when the rules store is empty."""
-    ensure_dirs()
-    if list(rules_dir().glob("*.md")):
-        return
-
-    agents_root = _agents_source_dir()
-    assignments: dict[str, list[str]] = {}
-
-    for agent_id in SYNC_AGENT_IDS:
-        rules_folder = agents_root / agent_id / "rules"
-        if rules_folder.is_dir():
-            for rule_file in sorted(rules_folder.glob("*.md")):
-                stem = _strip_numeric_prefix(rule_file.stem)
-                dest = rules_dir() / f"{stem}.md"
-                name = RULE_DISPLAY_NAMES.get(stem) or _humanize_id(stem)
-                if not dest.exists():
-                    dest.write_text(
-                        _set_md_meta(rule_file.read_text(encoding="utf-8"), name=name),
-                        encoding="utf-8",
-                    )
-                assignments.setdefault(stem, []).append(agent_id)
-
-    shared_rules = agents_root / "_shared" / "rules"
-    if shared_rules.is_dir():
-        for rule_file in sorted(shared_rules.glob("*.md")):
-            stem = _strip_numeric_prefix(rule_file.stem)
-            dest = rules_dir() / f"{stem}.md"
-            name = RULE_DISPLAY_NAMES.get(stem) or _humanize_id(stem)
-            if not dest.exists():
-                dest.write_text(
-                    _set_md_meta(rule_file.read_text(encoding="utf-8"), name=name),
-                    encoding="utf-8",
-                )
-            assignments[stem] = list(AGENT_IDS)
-
-    assignments_path().write_text(
-        json.dumps(assignments, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-
-
 # --- Instructions ---
 
 
@@ -758,7 +568,6 @@ def migrate_pipeline_agent_ids() -> None:
             old_skills.rename(new_skills)
 
     for path, save_fn, load_fn in (
-        (assignments_path(), save_assignments, load_assignments),
         (skill_assignments_path(), save_skill_assignments, load_skill_assignments),
     ):
         if not path.exists():
@@ -783,8 +592,14 @@ def migrate_pipeline_agent_ids() -> None:
             save_fn(next_map)
 
 
+def _write_skill_md(path: Path, text: str) -> None:
+    """Skip the write when the file already matches: concurrent workers on a bind mount hit EINVAL."""
+    if path.is_file() and path.read_text(encoding="utf-8") == text:
+        return
+    path.write_text(text, encoding="utf-8")
+
 def sync_pipeline_agents_from_source() -> None:
-    """Refresh seed rules, skills, instructions, and assignments from analytics/agents."""
+    """Refresh seed skills, instructions, and assignments from analytics/agents."""
     ensure_dirs()
     migrate_pipeline_agent_ids()
     agents_root = _agents_source_dir()
@@ -802,28 +617,6 @@ def sync_pipeline_agents_from_source() -> None:
                 # lean-ctx: Windows Docker bind mounts can raise Errno 22; skip sync write
                 pass
 
-    shared_rules = agents_root / "_shared" / "rules"
-    if shared_rules.is_dir():
-        for rule_file in sorted(shared_rules.glob("*.md")):
-            stem = _strip_numeric_prefix(rule_file.stem)
-            name = RULE_DISPLAY_NAMES.get(stem) or _humanize_id(stem)
-            (rules_dir() / f"{stem}.md").write_text(
-                _set_md_meta(rule_file.read_text(encoding="utf-8"), name=name),
-                encoding="utf-8",
-            )
-
-    for agent_id in SYNC_AGENT_IDS:
-        rules_folder = agents_root / agent_id / "rules"
-        if not rules_folder.is_dir():
-            continue
-        for rule_file in sorted(rules_folder.glob("*.md")):
-            stem = _strip_numeric_prefix(rule_file.stem)
-            name = RULE_DISPLAY_NAMES.get(stem) or _humanize_id(stem)
-            (rules_dir() / f"{stem}.md").write_text(
-                _set_md_meta(rule_file.read_text(encoding="utf-8"), name=name),
-                encoding="utf-8",
-            )
-
     shared_src = agents_root / "_shared" / "skills"
     if shared_src.is_dir():
         for skill_folder in sorted(shared_src.iterdir()):
@@ -831,13 +624,13 @@ def sync_pipeline_agents_from_source() -> None:
             if skill_folder.is_dir() and skill_md.exists():
                 dest_dir = skills_dir() / "shared" / skill_folder.name
                 dest_dir.mkdir(parents=True, exist_ok=True)
-                (dest_dir / "SKILL.md").write_text(
+                _write_skill_md(
+                    dest_dir / "SKILL.md",
                     _set_md_meta(
                         skill_md.read_text(encoding="utf-8"),
                         name=SKILL_DISPLAY_NAMES.get(skill_folder.name)
                         or _humanize_id(skill_folder.name),
                     ),
-                    encoding="utf-8",
                 )
 
     for agent_id in SYNC_AGENT_IDS:
@@ -851,16 +644,14 @@ def sync_pipeline_agents_from_source() -> None:
             if skill_folder.is_dir() and skill_md.exists():
                 dest_dir = dest_agent / skill_folder.name
                 dest_dir.mkdir(parents=True, exist_ok=True)
-                (dest_dir / "SKILL.md").write_text(
+                _write_skill_md(
+                    dest_dir / "SKILL.md",
                     _set_md_meta(
                         skill_md.read_text(encoding="utf-8"),
                         name=SKILL_DISPLAY_NAMES.get(skill_folder.name)
                         or _humanize_id(skill_folder.name),
                     ),
-                    encoding="utf-8",
                 )
-
-    save_assignments(default_rule_assignments())
     save_skill_assignments(default_skill_assignments())
 
     for issue in agent_asset_issues():
@@ -874,17 +665,6 @@ def migrate_sql_agent_id() -> None:
     new_skill = skills_dir() / "sql"
     if old_skill.is_dir() and not new_skill.exists():
         old_skill.rename(new_skill)
-    assignments = load_assignments()
-    changed = False
-    for rule_id, agents in list(assignments.items()):
-        if not isinstance(agents, list):
-            continue
-        next_agents = ["sql" if a == "sql_guardian" else a for a in agents]
-        if next_agents != agents:
-            assignments[rule_id] = next_agents
-            changed = True
-    if changed:
-        save_assignments(assignments)
     skill_asg = load_skill_assignments()
     skill_changed = False
     next_skill: dict[str, Any] = {}
@@ -942,17 +722,7 @@ def assemble_agent_prompt(agent_id: str, *, include_warehouse: bool | None = Non
         "",
         str(meta.get("description") or "").strip(),
         "",
-        "## Rules",
-        "",
     ]
-    for rule in list_rules():
-        if rule.get("disabled"):
-            continue
-        if definition_id not in (rule.get("agents") or []):
-            continue
-        parts.append(f"### {rule.get('name') or rule.get('id')}")
-        parts.append(rule.get("content") or "")
-        parts.append("")
     parts.append("## Skills")
     parts.append("")
     for skill in list_skills():
@@ -1155,161 +925,6 @@ def delete_rag_doc(doc_id: str) -> None:
     if not path.exists():
         raise FileNotFoundError(stem)
     path.unlink()
-
-
-# --- Rules ---
-
-
-def list_rules() -> list[dict]:
-    ensure_dirs()
-    migrate_rule_ids()
-    assignments = load_assignments()
-    items = []
-    for path in sorted(rules_dir().glob("*.md")):
-        content = path.read_text(encoding="utf-8")
-        meta = _parse_md_meta(content)
-        items.append(
-            {
-                "id": path.stem,
-                "name": meta["name"] or path.stem,
-                "disabled": bool(meta["disabled"]),
-                "filename": path.name,
-                "content": content,
-                "agents": assignments.get(
-                    path.stem, default_rule_assignments().get(path.stem, [])
-                ),
-            }
-        )
-    return items
-
-
-def get_rule(rule_id: str) -> dict:
-    stem = _safe_stem(rule_id)
-    path = rules_dir() / f"{stem}.md"
-    if not path.exists():
-        raise FileNotFoundError(stem)
-    assignments = load_assignments()
-    content = path.read_text(encoding="utf-8")
-    meta = _parse_md_meta(content)
-    return {
-        "id": stem,
-        "name": meta["name"] or stem,
-        "disabled": bool(meta["disabled"]),
-        "filename": path.name,
-        "content": content,
-        "agents": assignments.get(stem, default_rule_assignments().get(stem, [])),
-    }
-
-
-def create_rule(
-    rule_id: str,
-    content: str = "",
-    agents: list[str] | None = None,
-    *,
-    name: str | None = None,
-    disabled: bool = False,
-) -> dict:
-    ensure_dirs()
-    stem = _safe_stem(rule_id)
-    path = rules_dir() / f"{stem}.md"
-    if path.exists():
-        raise FileExistsError(stem)
-    text = _set_md_meta(content or "", name=name, disabled=disabled)
-    path.write_text(text, encoding="utf-8")
-    if agents is not None:
-        _set_rule_agents(stem, agents)
-    return get_rule(stem)
-
-
-def update_rule(
-    rule_id: str,
-    content: str | None = None,
-    agents: list[str] | None = None,
-    *,
-    name: str | None = None,
-    disabled: bool | None = None,
-) -> dict:
-    stem = _safe_stem(rule_id)
-    path = rules_dir() / f"{stem}.md"
-    if not path.exists():
-        raise FileNotFoundError(stem)
-    text = path.read_text(encoding="utf-8") if content is None else content
-    if name is not None or disabled is not None:
-        text = _set_md_meta(text, name=name, disabled=disabled)
-    if content is not None or name is not None or disabled is not None:
-        path.write_text(text, encoding="utf-8")
-    if agents is not None:
-        _set_rule_agents(stem, agents)
-    return get_rule(stem)
-
-
-def delete_rule(rule_id: str) -> None:
-    stem = _safe_stem(rule_id)
-    path = rules_dir() / f"{stem}.md"
-    if not path.exists():
-        raise FileNotFoundError(stem)
-    path.unlink()
-    assignments = load_assignments()
-    if stem in assignments:
-        del assignments[stem]
-        save_assignments(assignments)
-
-
-def load_assignments() -> dict[str, list[str]]:
-    ensure_dirs()
-    raw = json.loads(assignments_path().read_text(encoding="utf-8") or "{}")
-    if not isinstance(raw, dict):
-        return {}
-    known = _known_agent_ids()
-    cleaned: dict[str, list[str]] = {}
-    for key, value in raw.items():
-        if not isinstance(value, list):
-            continue
-        cleaned[str(key)] = [a for a in value if a in known]
-    return cleaned
-
-
-def save_assignments(assignments: dict[str, list[str]]) -> dict[str, list[str]]:
-    ensure_dirs()
-    known = _known_agent_ids()
-    cleaned: dict[str, list[str]] = {}
-    for key, agents in assignments.items():
-        if not isinstance(agents, list):
-            continue
-        cleaned[str(key)] = [a for a in agents if a in known]
-    assignments_path().write_text(
-        json.dumps(cleaned, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    return cleaned
-
-
-def _set_rule_agents(rule_id: str, agents: list[str]) -> None:
-    assignments = load_assignments()
-    known = _known_agent_ids()
-    assignments[rule_id] = [a for a in agents if a in known]
-    save_assignments(assignments)
-
-def rename_rule(old_id: str, new_id: str) -> dict:
-    ensure_dirs()
-    old_stem = _safe_stem(old_id)
-    new_stem = _safe_stem(new_id)
-    if old_stem == new_stem:
-        return get_rule(old_stem)
-    old_path = rules_dir() / f"{old_stem}.md"
-    new_path = rules_dir() / f"{new_stem}.md"
-    if not old_path.exists():
-        raise FileNotFoundError(old_stem)
-    if new_path.exists():
-        raise FileExistsError(new_stem)
-    content = old_path.read_text(encoding="utf-8")
-    new_path.write_text(content, encoding="utf-8")
-    old_path.unlink()
-    assignments = load_assignments()
-    if old_stem in assignments:
-        assignments[new_stem] = assignments.pop(old_stem)
-        save_assignments(assignments)
-    return get_rule(new_stem)
 
 
 def rename_skill(scope: str, old_id: str, new_id: str) -> dict:

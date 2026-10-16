@@ -2,8 +2,6 @@
 id: orchester
 name: Orchester
 description: Supervise the pipeline, route the run, package the UI payload
-rules:
-  - orchester
 skills:
   - orchestrate-pipeline
 ---

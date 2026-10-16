@@ -2,8 +2,6 @@
 id: final-approver
 name: final-approver
 description: Validate the fetch against the ask, write text_report, hand off to orchester
-rules:
-  - build-result
 skills:
   - publish-result
 ---

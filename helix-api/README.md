@@ -36,6 +36,6 @@ Django app state uses **SQLite** (`HELIX_DJANGO_ENGINE=sqlite`, volume `helix-sq
 
 1. Guardian → 2. SQL fetcher → 3. Response builder → 4. Validator (fail retries SQL fetcher)
 
-Agents use assigned rules and skills only (no instruction files). Analysis runs fetch real warehouse rows via the SQL fetcher (row-capped) and return charts/reports from those rows.
+Agents use assigned skills only (no instruction files). Analysis runs fetch real warehouse rows via the SQL fetcher (row-capped) and return charts/reports from those rows.
 
 See `backend/analytics/agents/registry.md`.
