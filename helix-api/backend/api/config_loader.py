@@ -34,6 +34,9 @@ DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 PROVIDER_OPENROUTER = "openrouter"
 PROVIDER_OPENAI_COMPATIBLE = "openai_compatible"
 PROVIDER_OPENCODE_GO = "opencode_go"
+PROVIDER_OPENCODE_ZEN = "opencode_zen"
+PROVIDER_OPENAI = "openai"
+PROVIDER_ANTHROPIC = "anthropic"
 
 # Connectors: every LLM back-end the user can pick, in dropdown order. A connector owns whatever
 # the app can decide for the user — endpoint, default model, key env var — so Settings only asks
@@ -67,6 +70,41 @@ CONNECTORS: dict[str, dict[str, Any]] = {
         # Go routes on a stable per-conversation id and rejects a request without one
         # (400 MissingSessionID), so the header name lives with the connector.
         "session_header": "x-opencode-session",
+    },
+    # OpenCode Zen: pay-per-use gateway on the same host, so it needs the same WAF User-Agent.
+    PROVIDER_OPENCODE_ZEN: {
+        "id": PROVIDER_OPENCODE_ZEN,
+        "label": "OpenCode-Zen",
+        "base_url": "https://opencode.ai/zen/v1",
+        "token_env": "OPENCODE_ZEN_API_KEY",
+        "asks_base_url": False,
+        "asks_workspace": False,
+        "api_key_required": True,
+        "key_url": "https://opencode.ai/auth",
+        "headers": {"User-Agent": "Helix/1.0"},
+    },
+    PROVIDER_OPENAI: {
+        "id": PROVIDER_OPENAI,
+        "label": "OpenAI",
+        "base_url": "https://api.openai.com/v1",
+        "default_model": "gpt-4.1",
+        "token_env": "OPENAI_API_KEY",
+        "asks_base_url": False,
+        "asks_workspace": False,
+        "api_key_required": True,
+        "key_url": "https://platform.openai.com/api-keys",
+    },
+    # Anthropic through its OpenAI-compatible endpoint, so the shared chat/completions path works.
+    PROVIDER_ANTHROPIC: {
+        "id": PROVIDER_ANTHROPIC,
+        "label": "Anthropic",
+        "base_url": "https://api.anthropic.com/v1",
+        "default_model": "claude-sonnet-4-5",
+        "token_env": "ANTHROPIC_API_KEY",
+        "asks_base_url": False,
+        "asks_workspace": False,
+        "api_key_required": True,
+        "key_url": "https://console.anthropic.com/settings/keys",
     },
     PROVIDER_OPENAI_COMPATIBLE: {
         "id": PROVIDER_OPENAI_COMPATIBLE,

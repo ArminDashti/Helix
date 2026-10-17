@@ -71,6 +71,9 @@ const EMPTY_DB = {
 
 const SSL_MODES = ["disable", "prefer", "require", "verify-ca", "verify-full"];
 
+// Display-only stand-in for a saved API key; the real key never leaves the API host.
+const SAVED_API_KEY_MASK = "*".repeat(20);
+
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
 const EMPTY_OPENROUTER = {
@@ -414,7 +417,7 @@ function StatusLogsSection() {
   };
 
   const services = [
-    { id: "llm", label: t("layout.status.llm") },
+    { id: "llm", label: t("settings.tabLlm") },
     { id: "engine", label: t("layout.status.engine") },
     { id: "database", label: t("layout.status.database") },
   ];
@@ -1308,14 +1311,10 @@ export default function SettingsPage() {
                   id="llm_token"
                   type="password"
                   autoComplete="off"
-                  value={orForm.token || ""}
-                  onChange={(e) => updateOrField("token", e.target.value)}
+                  value={orForm.token || (activeTokenConfigured ? SAVED_API_KEY_MASK : "")}
+                  onChange={(e) => updateOrField("token", e.target.value.replaceAll("*", ""))}
                   className={inputClass}
-                  placeholder={
-                    activeTokenConfigured
-                      ? t("settings.apiKeySavedPlaceholder")
-                      : t("settings.apiKeyPastePlaceholder")
-                  }
+                  placeholder={t("settings.apiKeyPastePlaceholder")}
                   spellCheck={false}
                 />
               </Field>
@@ -1324,20 +1323,6 @@ export default function SettingsPage() {
                   ? t("settings.apiKeySavedHint")
                   : t("settings.apiKeyPasteHint")}
               </p>
-              {activeConnector?.key_url ? (
-                <p className="text-xs">
-                  <a
-                    href={activeConnector.key_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-moss underline decoration-line underline-offset-2 hover:text-ink"
-                  >
-                    {t("settings.getApiKey", {
-                      connector: connectorLabel(t, activeConnector),
-                    })}
-                  </a>
-                </p>
-              ) : null}
             </>
           ) : null}
 

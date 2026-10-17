@@ -228,8 +228,17 @@ export default function Layout() {
           ) : null}
         </div>
 
-        {mainLinks.map((link) => (
-          <NavItem key={link.to} link={link} />
+        {navGroups.map((group) => (
+          <details key={group.labelKey} className="group" open>
+            <summary className="cursor-pointer select-none rounded-lg px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted hover:bg-fog">
+              {t(group.labelKey)}
+            </summary>
+            <div className="mt-1 flex flex-col gap-1 ps-2">
+              {group.links.map((link) => (
+                <NavItem key={link.to} link={link} />
+              ))}
+            </div>
+          </details>
         ))}
 
         <div className="mt-auto space-y-1 pt-2">

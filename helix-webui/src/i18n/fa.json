@@ -45,7 +45,11 @@
     "dbExplorer": "کاوشگر پایگاه داده",
     "admin": "مدیریت",
     "settings": "تنظیمات",
-    "aboutMe": "درباره من"
+    "aboutMe": "درباره من",
+    "groups": {
+      "analyze": "تحلیل",
+      "configure": "پیکربندی"
+    }
   },
   "layout": {
     "brand": "Helix",
@@ -475,7 +479,6 @@
     "baseUrlManagedHint": "این نشانی برای این اتصال‌دهنده در خود برنامه تنظیم شده است — فقط کلید API لازم است.",
     "baseUrlPlaceholder": "https://api.openai.com/v1",
     "apiKey": "کلید API",
-    "apiKeySavedPlaceholder": "روی میزبان API ذخیره شده",
     "apiKeyPastePlaceholder": "کلید API را بچسبانید",
     "apiKeySavedHint": "یک کلید API روی میزبان API ذخیره شده است. برای جایگزینی، کلید جدید را بچسبانید.",
     "apiKeyPasteHint": "کلید API را اینجا بچسبانید. روی میزبان API ذخیره می‌شود، نه در مرورگر.",

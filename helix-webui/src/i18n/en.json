@@ -475,7 +475,6 @@
     "baseUrlManagedHint": "Provided by the app for this connector — only the API key is needed.",
     "baseUrlPlaceholder": "https://api.openai.com/v1",
     "apiKey": "API key",
-    "apiKeySavedPlaceholder": "Saved on the API host",
     "apiKeyPastePlaceholder": "Paste API key",
     "apiKeySavedHint": "An API key is saved on the API host. Paste a new key to replace it.",
     "apiKeyPasteHint": "Paste the API key here. It is saved on the API host, not in the browser.",

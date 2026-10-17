@@ -10,6 +10,7 @@
     "build:admin-guide-pdf": "node scripts/build-admin-guide-pdf.mjs"
   },
   "dependencies": {
+    "@toon-format/toon": "^4.4.0",
     "@xyflow/react": "^12.11.2",
     "echarts": "^5.6.0",
     "echarts-for-react": "^3.0.2",

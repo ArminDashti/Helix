@@ -29,3 +29,25 @@ helix-webui/UsersarminAppDataLocalhermescachescratchdocs_tables.json
 # Auto-managed: files larger than 5 MB
 .codegraph/codegraph.db
 .gitnexus/lbug
+
+# hygiene
+node_modules/
+dist/
+build/
+bin/
+obj/
+.venv/
+__pycache__/
+*.log
+logs/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+.cache/
+coverage/
+*.zip
+*.7z
+graphify-out/
+.gitnexus/
+/.cursor/skills/caveman-setup/SKILL.md

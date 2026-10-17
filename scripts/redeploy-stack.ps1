@@ -337,3 +337,4 @@ catch {
     Write-Fail $_.Exception.Message
     exit 1
 }
+
