@@ -44,7 +44,7 @@ orchester
 ## Protocol
 
 - Agent messages are JSON objects carried in pipeline state; each hop emits an SSE step event to the UI.
-- Tools are exposed to the model as OpenAI-style function calls (`execute_select`, `ask_operator`, `submit_result`).
+- Tools are exposed to the model as OpenAI-style function calls (`ask_sql_expert`, `execute_select`, `submit_result`). Only orchester talks to the operator.
 - The database target and its schema come from Settings, never from a hardcoded catalog.
 - Keep rule and skill text short: it is concatenated into the agent's system prompt on every call.
 

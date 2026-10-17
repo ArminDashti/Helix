@@ -16,8 +16,6 @@ import { useApiStatus } from "../context/ApiStatusContext.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
 import { fetchBranding } from "../api/client.js";
 import { assetUrl } from "../utils/assetUrl.js";
-import pkg from "../../package.json";
-
 const THEME_STORAGE_KEY = "helix-theme";
 
 function isConnectedStatus(status) {
@@ -268,10 +266,15 @@ export default function Layout() {
           </NavLink>
 
           <p className="rounded-xl border border-line/80 bg-fog/40 px-2 py-1.5 text-center text-sm leading-snug text-muted">
-            {t("layout.credit")}
-            <span className="mt-0.5 block text-xs opacity-80">
-              {t("layout.version", { version: pkg.version })}
-            </span>
+            {t("layout.credit")}{" "}
+            <a
+              href="https://github.com/armindashti"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 hover:text-ink"
+            >
+              {t("layout.creatorName")}
+            </a>
           </p>
         </div>
       </nav>

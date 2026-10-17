@@ -78,12 +78,8 @@ def _llm(
     return assistant
 
 
-# Graph nodes a pause can resume into. The asking node is the resume node: the turn that produced
-# the question is the turn that consumes the answer.
-_RESUME_NODES = ("orchester", "guardian", "researcher", "final-approver")
-
-# Turns an agent gets back after a pause, so asking a question does not eat its tool budget.
-_RESUME_TURN_ALLOWANCE = 2
+# Only orchester talks to the operator, so orchester is the only node a pause can resume into.
+_RESUME_NODES = ("orchester",)
 
 # Max questions Orchester asks before the run starts. Above this the run is better off proceeding
 # with its own judgement and letting the pipeline report the gap.
@@ -240,6 +236,90 @@ def _off_product_block(prompt: str) -> str | None:
     return None
 
 
+# Worker agents orchester may send back to. final-approver's gaps go back to researcher.
+_RETRY_AGENTS = ("researcher", "guardian", "final-approver")
+
+_ORCHESTER_DECIDE_SYSTEM = (
+    "You are orchester, the only agent that talks to the operator. A worker agent reported a "
+    "problem. Decide the next step.\n"
+    "retry: run the worker again with a short hint. Use it only when a different query or "
+    "wording can fix the problem.\n"
+    "ask: ask the operator one short question. Use it only when the answer changes which data "
+    "is asked for.\n"
+    "stop: end the run and show the reason.\n"
+    'Reply with JSON only: {"action":"retry|ask|stop","hint":"...","question":"..."}.'
+)
+
+
+def _orchester_decide(
+    state: PipelineState,
+    ctx: dict[str, Any],
+    *,
+    sender: str,
+    status: str,
+    message: str,
+) -> tuple[str, str]:
+    """Orchester's last decision on a worker problem. Returns (route, status message).
+
+    The LLM picks retry / ask / stop among the actions still allowed. When it is unavailable or
+    answers something else, the fallback is the old rule: final-approver gets one retry, the rest
+    stop.
+    """
+    retries = ctx.setdefault("_retries", {})
+    if sender == "guardian" and status == "fail":
+        # A guardian block is a safety verdict: no retry, no question, no model call.
+        return _orchester_stop(ctx, message or "guardian blocked the prompt")
+    allowed = ["stop", "ask"]
+    if sender in _RETRY_AGENTS and int(retries.get(sender) or 0) < 1:
+        allowed.insert(0, "retry")
+    fallback = "retry" if sender == "final-approver" and "retry" in allowed else "stop"
+
+    inbox = ctx.get("orchester_inbox") if isinstance(ctx.get("orchester_inbox"), list) else []
+    user = (
+        f"Prompt: {ctx.get('prompt') or ''}\n"
+        f"Worker: {sender}\nStatus: {status}\nMessage: {message}\n"
+        f"Allowed actions: {', '.join(allowed)}\n"
+        f"Recent inbox: {json.dumps(inbox[-5:], ensure_ascii=False, default=str)}"
+    )
+    parsed: dict[str, Any] = {}
+    try:
+        assistant = _llm(
+            ctx,
+            "orchester",
+            [
+                {"role": "system", "content": _ORCHESTER_DECIDE_SYSTEM},
+                {"role": "user", "content": user},
+            ],
+        )
+        parsed = _parse_json_object(str(assistant.get("content") or ""))
+    except Exception:  # noqa: BLE001 - a missing decision falls back, it never crashes the run
+        parsed = {}
+    action = str(parsed.get("action") or "").strip().lower()
+    hint = str(parsed.get("hint") or "").strip()
+    question = str(parsed.get("question") or "").strip()
+    if action not in allowed or (action == "ask" and not question):
+        action = fallback
+
+    if action == "retry":
+        retries[sender] = int(retries.get(sender) or 0) + 1
+        target = "researcher" if sender == "final-approver" else sender
+        if hint:
+            ctx["orchester_hint"] = hint
+        return target, _ui(ctx, f"Orchester retries {target}", f"Orchester دوباره {target} را اجرا می‌کند")
+    if action == "ask":
+        ctx["_orchester_resume_to"] = sender
+        _ask_operator(state, agent_id="orchester", questions=[_question("q1", question)])
+        return "needs_input", _ui(ctx, "Orchester asks the operator", "Orchester از کاربر می‌پرسد")
+
+    return _orchester_stop(ctx, message or f"{sender} failed")
+
+
+def _orchester_stop(ctx: dict[str, Any], err: str) -> tuple[str, str]:
+    ctx["last_error"] = err
+    ctx["_orchester_outcome"] = ("fail", err)
+    return "fail", _ui(ctx, f"Orchester stops: {err[:160]}", f"Orchester توقف: {err[:160]}")
+
+
 def node_orchester(state: PipelineState) -> PipelineState:
     from .pipeline_run import _guardian_hard_block, _package_result
 
@@ -248,6 +328,11 @@ def node_orchester(state: PipelineState) -> PipelineState:
     if ctx.get("_pending_question"):
         # A node just parked the run on a question: end the graph without routing further.
         state["route"] = "needs_input"
+        return state
+    resume_to = ctx.pop("_orchester_resume_to", None)
+    if resume_to:
+        # The operator answered orchester's question: send the run back to the worker that needed it.
+        state["route"] = str(resume_to)
         return state
     inbox = ctx.get("orchester_inbox") if isinstance(ctx.get("orchester_inbox"), list) else []
     last = inbox[-1] if inbox else None
@@ -290,21 +375,14 @@ def node_orchester(state: PipelineState) -> PipelineState:
     else:
         sender = str(last.get("from") or "")
         status = str(last.get("status") or "")
-        if status in ("fail", "failed"):
-            if sender == "final-approver" and int(ctx.get("_researcher_retries") or 0) < 1:
-                ctx["_researcher_retries"] = int(ctx.get("_researcher_retries") or 0) + 1
-                route = "researcher"
-                msg = _ui(
-                    ctx,
-                    "Orchester retries researcher after final-approver gaps",
-                    "Orchester پس از نقص final-approver دوباره researcher را می‌فرستد",
-                )
-            else:
-                route = "fail"
-                err = str(last.get("message") or "Pipeline failed")
-                ctx["last_error"] = err
-                ctx["_orchester_outcome"] = ("fail", err)
-                msg = _ui(ctx, f"Orchester stops: {err[:160]}", f"Orchester توقف: {err[:160]}")
+        if status in ("fail", "failed", "needs_input"):
+            route, msg = _orchester_decide(
+                state,
+                ctx,
+                sender=sender,
+                status=status,
+                message=str(last.get("message") or ""),
+            )
         elif sender == "guardian":
             route = "researcher"
             msg = _ui(ctx, "Orchester → researcher", "Orchester → researcher")
@@ -418,8 +496,8 @@ def node_guardian(state: PipelineState) -> PipelineState:
         )
 
     if result in ("needs_input", "ask", "question") and question:
-        _ask_operator(state, agent_id="guardian", questions=[_question("q1", question)])
-        state["route"] = "needs_input"
+        _tell_orchester(ctx, sender="guardian", status="needs_input", message=question)
+        state["route"] = "orchester"
         return state
 
     if result in ("fail", "failed", "reject", "blocked"):
@@ -450,11 +528,10 @@ def node_guardian(state: PipelineState) -> PipelineState:
 
 
 def _researcher_tools() -> list[dict[str, Any]]:
-    from .pipeline_run import ASK_OPERATOR_TOOL, active_tools
+    from .pipeline_run import active_tools
+    from .sql_expert import ASK_SQL_EXPERT_TOOL
 
-    out: list[dict[str, Any]] = active_tools(("execute_select", "search_web"))
-    out.append(ASK_OPERATOR_TOOL)
-    return out
+    return [*active_tools(("search_web",)), ASK_SQL_EXPERT_TOOL]
 
 
 def node_researcher(state: PipelineState) -> PipelineState:
@@ -463,10 +540,10 @@ def node_researcher(state: PipelineState) -> PipelineState:
         _assistant_message_for_history,
         _build_user_message,
         _dispatch_tool,
-        _operator_answers_text,
         _parse_tool_args,
         _tool_contract_suffix,
     )
+    from .sql_expert import run_sql_request
 
     ctx = state["ctx"]
     state["events"] = []
@@ -485,18 +562,21 @@ def node_researcher(state: PipelineState) -> PipelineState:
     )
     system += (
         "\n\n## Tools\n"
-        "Use execute_select for data facts (TOP/FETCH always).\n"
+        "For every data fact call ask_sql_expert with one plain-English request "
+        "(measure, period, filter). Never write SQL yourself.\n"
         + web_tool_line
-        + "Use ask_operator when the request cannot be resolved from the catalog (ambiguous period, "
-        "missing grouping, two plausible tables) — the run pauses until the operator answers.\n"
+        + "If ask_sql_expert returns ok:false, do not retry it. Reply with the reason in message.\n"
         "Do NOT call submit_result.\n"
         "When finished, reply with JSON only:\n"
         '{"goals":"...","what_was_done":"...","message":"short status"}\n'
         "Ground claims in sql_fetch preview numbers.\n"
     )
+    hint = str(ctx.pop("orchester_hint", "") or "").strip()
+    if hint:
+        system += f"Orchester hint for this retry: {hint}\n"
     for line in _tool_contract_suffix(ctx).splitlines():
         lower = line.lower()
-        if "submit_result" in lower or "sole helix" in lower:
+        if "submit_result" in lower or "sole helix" in lower or "execute_select" in lower:
             continue
         system += line + "\n"
 
@@ -507,30 +587,16 @@ def node_researcher(state: PipelineState) -> PipelineState:
         system += "\n\n" + str(rag["text"])
     ctx["rag"] = {key: value for key, value in rag.items() if key != "text"}
 
-    # A pause stashes the tool-loop conversation, so the resumed turn continues the same thread
-    # (with the answer appended) instead of replaying the SELECTs it already ran.
-    resume = ctx.pop("_researcher_resume", None)
-    resumed = isinstance(resume, dict)
-    if resumed:
-        messages = [
-            msg for msg in (resume.get("messages") or []) if isinstance(msg, dict)
-        ]
-        answers = _operator_answers_text(ctx)
-        if answers:
-            messages.append({"role": "user", "content": answers})
-    else:
-        messages = [
-            {"role": "system", "content": system},
-            {"role": "user", "content": _build_user_message(ctx)},
-        ]
-    first_turn = (int(resume.get("turn") or 0) + 1) if resumed else 1
-    turn_budget = MAX_TOOL_TURNS + (_RESUME_TURN_ALLOWANCE if resumed else 0)
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": _build_user_message(ctx)},
+    ]
     tools = _researcher_tools()
     goals = str(ctx.get("goals") or "")
     what_was_done = str(ctx.get("what_was_done") or "")
     status_message = ""
 
-    for turn in range(first_turn, turn_budget + 1):
+    for turn in range(1, MAX_TOOL_TURNS + 1):
         _emit(
             state,
             agent_id="researcher",
@@ -582,31 +648,14 @@ def node_researcher(state: PipelineState) -> PipelineState:
                 if args.get("text_report"):
                     ctx["text_report"] = str(args.get("text_report"))
                 continue
-            if name == "ask_operator":
-                question = str(args.get("question") or "").strip() or _ui(
-                    ctx,
-                    "Which data should this report use?",
-                    "این گزارش از کدام داده استفاده کند؟",
+            if name == "ask_sql_expert":
+                result_json = json.dumps(
+                    run_sql_request(str(args.get("request") or ""), ctx),
+                    ensure_ascii=False,
+                    default=str,
                 )
-                # Close the tool call before pausing: the resumed thread replays this history, and
-                # an unanswered tool_call would be rejected by the connector.
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": str(call.get("id") or name or "ask_operator"),
-                        "content": json.dumps(
-                            {"ok": True, "note": "Question sent to the operator."},
-                            ensure_ascii=False,
-                        ),
-                    }
-                )
-                ctx["_researcher_resume"] = {"messages": messages, "turn": turn}
-                _ask_operator(
-                    state, agent_id="researcher", questions=[_question("q1", question)]
-                )
-                state["route"] = "needs_input"
-                return state
-            result_json, _done = _dispatch_tool(name, args, ctx)
+            else:
+                result_json, _done = _dispatch_tool(name, args, ctx)
             messages.append(
                 {
                     "role": "tool",
@@ -640,10 +689,9 @@ def node_researcher(state: PipelineState) -> PipelineState:
 
     fetch = ctx.get("sql_fetch") if isinstance(ctx.get("sql_fetch"), dict) else None
     if not fetch:
-        err = _ui(
-            ctx,
-            "Researcher finished without a successful SELECT",
-            "Researcher بدون SELECT موفق تمام شد",
+        err = str(
+            ctx.get("last_error")
+            or _ui(ctx, "Researcher finished without a successful SELECT", "Researcher بدون SELECT موفق تمام شد")
         )
         ctx["last_error"] = err
         _tell_orchester(ctx, sender="researcher", status="fail", message=err)
@@ -764,10 +812,8 @@ def node_final_approver(state: PipelineState) -> PipelineState:
 
     question = str(parsed.get("question") or "").strip()
     if result in ("needs_input", "ask", "question") and question:
-        _ask_operator(
-            state, agent_id="final-approver", questions=[_question("q1", question)]
-        )
-        state["route"] = "needs_input"
+        _tell_orchester(ctx, sender="final-approver", status="needs_input", message=question)
+        state["route"] = "orchester"
         return state
 
     if result in ("fail", "failed") or (not text_report and gaps):
@@ -876,7 +922,7 @@ def langgraph_events(
     """
     ctx.setdefault("orchester_inbox", [])
     ctx.setdefault("artifacts", {})
-    ctx.setdefault("_researcher_retries", 0)
+    ctx.setdefault("_retries", {})
     initial: PipelineState = {"ctx": ctx, "route": "orchester", "events": []}
     if entry:
         initial["entry"] = str(entry)

@@ -26,8 +26,8 @@ Gather. Introspect the live catalog of the database configured in Settings, plan
 
 ## Tools
 
-- `execute_select` — read-only SELECT on the Settings database
-- `ask_operator` — one question when the ask is ambiguous
+- `ask_sql_expert` — send one plain-English data ask to sql-expert, which writes and runs the SELECT and returns the rows
+- Never write SQL. Never ask the operator: an unresolved ask returns to orchester, which decides
 - Never `submit_result`
 
 ## Notes

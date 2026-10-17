@@ -78,8 +78,8 @@
       "disconnected": "قطع",
       "lineTitle": "{{label}} {{state}}"
     },
-    "credit": "ساختهٔ Dashti Technologies LLC (آرمین دشتی)",
-    "version": "v{{version}}"
+    "credit": "ساختهٔ",
+    "creatorName": "آرمین دشتی"
   },
   "errors": {
     "title": "خطا",

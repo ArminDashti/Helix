@@ -25,8 +25,8 @@ The only agent that talks to the database. Other agents send a plain-English dat
 ## Tools
 
 - `execute_select`: read-only SELECT on the Settings database
-- `ask_operator`: one question when the ask is ambiguous
 - Never `submit_result`
+- Never ask the human. An ambiguous ask returns `{ error, reason }` to the caller, and orchester decides
 
 ## Notes
 

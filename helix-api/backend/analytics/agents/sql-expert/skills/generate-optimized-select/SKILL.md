@@ -10,7 +10,7 @@ Output: `{ sql, row_count, columns, rows_preview, notes }` or `{ error, reason }
 
 ## Procedure
 
-1. Parse the ask. Name the grain (what one output row means), the measure (what is counted or summed), the period, and the filter. If any of these is missing and cannot be inferred from the catalog, call `ask_operator` once. Do not guess wide.
+1. Parse the ask. Name the grain (what one output row means), the measure (what is counted or summed), the period, and the filter. If any of these is missing and cannot be inferred from the catalog, return `{ error, reason }` naming the missing piece. Do not guess wide. Orchester decides the next step.
 2. Introspect before writing. Read the live catalog for candidate tables, their keys, indexes, and date column types. Read the table Overview in the knowledge notes. Use only objects and columns that exist.
 3. Pick the cheapest shape: the driving table, a selective filter, then lookups, then aggregate, then `TOP`/`FETCH`. Prefer a key or an explicit date range on the raw column.
 4. Run the pre-flight checklist below. If any check fails, fix the SQL before running it.

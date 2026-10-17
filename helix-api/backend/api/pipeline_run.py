@@ -123,32 +123,6 @@ def active_tools(names: tuple[str, ...] | None = None) -> list[dict[str, Any]]:
     return out
 
 
-# Ask the operator mid-run. The pipeline pauses on this call, the UI collects the answer, and
-# the researcher's own turn resumes with the answer in ctx['clarifications'].
-ASK_OPERATOR_TOOL: dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": "ask_operator",
-        "description": (
-            "Ask the operator one question when the request cannot be resolved from the live "
-            "catalog — an ambiguous period, a missing grouping, or two equally plausible tables. "
-            "The run pauses until they answer. Do not use it for anything you can decide yourself, "
-            "and never for SQL, credentials, or permission."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "question": {
-                    "type": "string",
-                    "description": "One short question for the operator",
-                },
-            },
-            "required": ["question"],
-        },
-    },
-}
-
-
 def _append_step_log(
     ctx: dict[str, Any],
     *,

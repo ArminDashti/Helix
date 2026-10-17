@@ -11,6 +11,9 @@
   "final-approver/publish-result": [
     "final-approver"
   ],
+  "sql-expert/generate-optimized-select": [
+    "sql-expert"
+  ],
   "web-searcher/search-web": [
     "web-searcher"
   ]

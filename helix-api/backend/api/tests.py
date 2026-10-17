@@ -303,8 +303,17 @@ class FourAgentPipelineTests(SimpleTestCase):
             "guardian",
             "researcher",
             "final-approver",
+            "sql-expert",
         ):
             self.assertIn(agent_id, AGENT_IDS)
+
+    def test_only_orchester_can_ask_the_operator(self):
+        from .pipeline_langgraph import _researcher_tools
+
+        names = {tool["function"]["name"] for tool in _researcher_tools()}
+        self.assertIn("ask_sql_expert", names)
+        self.assertNotIn("execute_select", names)
+        self.assertNotIn("ask_operator", names)
 
     def test_web_searcher_registered_as_sub_agent(self):
         from .agents import SUB_AGENT_IDS, is_sub_agent
@@ -864,6 +873,64 @@ class LlmSettingsTests(SimpleTestCase):
                 )
                 self.assertEqual(captured["body"]["model"], "deepseek-v4-flash")
 
+    def test_opencode_go_claude_model_uses_anthropic_messages_protocol(self):
+        """Claude Haiku 5.5 on Go accepts only Anthropic Messages (x-api-key, system hoisted)."""
+        from .llm_client import complete_chat_messages
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "helix.config.yaml"
+            with override_settings(HELIX_CONFIG_PATH=str(config_path)):
+                save_config({"provider": "opencode_go"})
+                update_openrouter_settings(
+                    {
+                        "token": "sk-test",
+                        "agents": {"orchester": {"model": "claude-haiku-5-5"}},
+                    }
+                )
+                captured = {}
+
+                class _Response:
+                    def __enter__(self):
+                        return self
+
+                    def __exit__(self, *exc):
+                        return False
+
+                    def read(self):
+                        return json.dumps(
+                            {"content": [{"type": "text", "text": "pong"}], "usage": {}}
+                        ).encode("utf-8")
+
+                def _fake_urlopen(request, timeout=None):
+                    captured["url"] = request.full_url
+                    captured["headers"] = {
+                        key.lower(): value for key, value in request.header_items()
+                    }
+                    captured["body"] = json.loads(request.data.decode("utf-8"))
+                    return _Response()
+
+                with patch("api.llm_client.urllib.request.urlopen", _fake_urlopen):
+                    message = complete_chat_messages(
+                        "orchester",
+                        [
+                            {"role": "system", "content": "be brief"},
+                            {"role": "user", "content": "ping"},
+                        ],
+                    )
+
+                self.assertEqual(message["content"], "pong")
+                self.assertEqual(
+                    captured["url"], "https://opencode.ai/inference/go/anthropic/v1/messages"
+                )
+                self.assertEqual(captured["headers"]["x-api-key"], "sk-test")
+                self.assertNotIn("authorization", captured["headers"])
+                self.assertEqual(captured["body"]["model"], "claude-haiku-5-5")
+                self.assertEqual(captured["body"]["system"], "be brief")
+                self.assertEqual(
+                    captured["body"]["messages"], [{"role": "user", "content": "ping"}]
+                )
+                self.assertNotIn("temperature", captured["body"])
+
     def test_opencode_go_chat_request_carries_a_session_header(self):
         """Go answers a request with no x-opencode-session with 400 MissingSessionID."""
         from .llm_client import complete_chat_messages
@@ -1206,31 +1273,104 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
         self.assertIn("last quarter", self._user_prompt(seen["researcher"][-1]))
         self.assertIsNone(run_store.peek_paused(ctx["run_id"]))
 
-    def test_researcher_asks_mid_run_and_resumes_its_own_tool_loop(self):
+    @staticmethod
+    def _ask_sql_expert_call(request: str):
+        return {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "r1",
+                    "type": "function",
+                    "function": {
+                        "name": "ask_sql_expert",
+                        "arguments": json.dumps({"request": request}),
+                    },
+                }
+            ],
+        }
+
+    def test_researcher_gets_rows_from_sql_expert(self):
+        from . import markdown_store as store
+
+        ctx = self._ctx()
+        seen: dict[str, list] = {}
+        sql_call = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "s1",
+                    "type": "function",
+                    "function": {
+                        "name": "execute_select",
+                        "arguments": json.dumps({"sql": "SELECT TOP 1 1 AS n"}),
+                    },
+                }
+            ],
+        }
+        fake_chat = self._chat(
+            {
+                "orchester": [{"role": "assistant", "content": "{}"}],
+                "guardian": [self.PASS_GUARDIAN],
+                "researcher": [
+                    self._ask_sql_expert_call("count one row"),
+                    *self._researcher_script()[1:],
+                ],
+                "sql-expert": [
+                    sql_call,
+                    {"role": "assistant", "content": '{"ok":true,"notes":"one row"}'},
+                ],
+                "final-approver": [self.APPROVE],
+            },
+            seen,
+        )
+
+        with patch("api.pipeline_langgraph.complete_chat_messages", side_effect=fake_chat):
+            with patch("api.pipeline_run.execute_select", return_value=self.SELECT):
+                with patch.object(store, "assemble_agent_prompt", return_value="system"):
+                    events = self._drain(ctx)
+
+        self.assertIn("sql-expert", seen)
+        self.assertEqual(ctx["sql_fetch"]["rows"], self.SELECT["rows"])
+        self.assertEqual(ctx["_orchester_outcome"][0], "done")
+        self.assertNotIn("question", [event.get("event") for event in events])
+
+    def test_sql_expert_failure_reaches_orchester_which_asks_the_operator(self):
         from . import markdown_store as store
 
         ctx = self._ctx()
         seen: dict[str, list] = {}
         fake_chat = self._chat(
             {
-                "orchester": [{"role": "assistant", "content": "{}"}],
+                "orchester": [
+                    {"role": "assistant", "content": "{}"},
+                    {"role": "assistant", "content": '{"action":"ask","question":"Which period?"}'},
+                ],
                 "guardian": [self.PASS_GUARDIAN],
                 "researcher": [
+                    self._ask_sql_expert_call("sales last period"),
+                    *self._researcher_script()[1:],
+                    self._ask_sql_expert_call("sales last quarter"),
+                    *self._researcher_script()[1:],
+                ],
+                "sql-expert": [
+                    {"role": "assistant", "content": '{"ok":false,"reason":"period missing"}'},
                     {
                         "role": "assistant",
                         "content": None,
                         "tool_calls": [
                             {
-                                "id": "c1",
+                                "id": "s1",
                                 "type": "function",
                                 "function": {
-                                    "name": "ask_operator",
-                                    "arguments": json.dumps({"question": "Which region?"}),
+                                    "name": "execute_select",
+                                    "arguments": json.dumps({"sql": "SELECT TOP 1 1 AS n"}),
                                 },
                             }
                         ],
                     },
-                    *self._researcher_script(),
+                    {"role": "assistant", "content": '{"ok":true,"notes":"quarter"}'},
                 ],
                 "final-approver": [self.APPROVE],
             },
@@ -1243,30 +1383,19 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
                     events = self._drain(ctx)
 
         questions = [event for event in events if event.get("event") == "question"]
-        self.assertEqual(len(questions), 1)
-        self.assertEqual(questions[0]["agent_id"], "researcher")
-        self.assertEqual(questions[0]["questions"][0]["text"], "Which region?")
+        self.assertEqual([q["agent_id"] for q in questions], ["orchester"])
+        self.assertEqual(questions[0]["questions"][0]["text"], "Which period?")
+        self.assertNotIn("result", [event.get("event") for event in events])
 
         seen.clear()
         with patch("api.pipeline_langgraph.complete_chat_messages", side_effect=fake_chat):
             with patch("api.pipeline_run.execute_select", return_value=self.SELECT):
                 with patch.object(store, "assemble_agent_prompt", return_value="system"):
-                    resumed = self._resume(ctx["run_id"], {"q1": "EMEA"})
+                    resumed = self._resume(ctx["run_id"], {"q1": "last quarter"})
 
         self.assertEqual(resumed[-1]["event"], "result")
-        # The paused thread continued rather than restarting: one system message, the ask_operator
-        # call it made already answered, and the operator's answer as the newest user turn.
-        messages = seen["researcher"][0]
-        self.assertEqual(sum(1 for m in messages if m.get("role") == "system"), 1)
-        asks = [
-            m
-            for m in messages
-            if m.get("role") == "assistant" and m.get("tool_calls")
-            and m["tool_calls"][0]["function"]["name"] == "ask_operator"
-        ]
-        self.assertEqual(len(asks), 1)
-        self.assertEqual(sum(1 for m in messages if m.get("role") == "tool"), 1)
-        self.assertIn("EMEA", str(messages[-1].get("content") or ""))
+        # Orchester sent the run back to researcher, which carried the operator's answer.
+        self.assertIn("last quarter", self._user_prompt(seen["researcher"][-1]))
 
     def test_guardian_needs_input_pauses_instead_of_failing(self):
         from . import markdown_store as store
@@ -1275,7 +1404,13 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
         seen: dict[str, list] = {}
         fake_chat = self._chat(
             {
-                "orchester": [{"role": "assistant", "content": "{}"}],
+                "orchester": [
+                    {"role": "assistant", "content": "{}"},
+                    {
+                        "role": "assistant",
+                        "content": '{"action":"ask","question":"Which cost column do you mean?"}',
+                    },
+                ],
                 "guardian": [
                     {
                         "role": "assistant",
@@ -1298,7 +1433,7 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
                     events = self._drain(ctx)
 
         questions = [event for event in events if event.get("event") == "question"]
-        self.assertEqual([q["agent_id"] for q in questions], ["guardian"])
+        self.assertEqual([q["agent_id"] for q in questions], ["orchester"])
         self.assertEqual(questions[0]["questions"][0]["text"], "Which cost column do you mean?")
         # needs_input is a pause, not the guardian's reject path.
         self.assertNotIn("fail", [event.get("result") for event in events])

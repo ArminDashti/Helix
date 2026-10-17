@@ -9,7 +9,7 @@ description: Resolve the ask, plan one cheap bounded SELECT, run it once, then h
 2. Look up before you write SQL: read the live catalog, the Overview of each candidate table in Table docs, and the retrieved knowledge notes. From them pick the grain (what one row means), the driving table, the join keys, and the single most selective filter on a column the user named.
 3. Choose the cheapest shape: filter â†’ join lookups â†’ aggregate â†’ TOP (window function for top-N asks). Keep every predicate sargable, and express a period as an explicit range over the raw date column rather than a computed date expression.
 4. Select only what the answer needs. If the ask is a total, a share, or a ranking, let SQL compute it â€” do not pull detail rows to add up in the report.
-5. Call `execute_select` once â€” it is the MCP-backed database tool and the only path to the database â€” then read `row_count` and the preview. Check that the grain and the magnitude match the ask before treating the data as final.
+5. Call `ask_sql_expert` once with the plain-English ask (measure, period, filter); sql-expert writes and runs the SELECT. Then read `row_count` and the preview. Check that the grain and the magnitude match the ask before treating the data as final.
 6. On error, or on an empty or implausible result, change exactly one thing (predicate, period, or join) and run one revision. Never re-send identical SQL: it cannot return different data on the second try.
 7. Set `goals` (the user ask) and `what_was_done` (SQL intent, row outcome, and which filter kept it cheap).
 8. Finish with JSON `{goals, what_was_done, message}`; never call `submit_result`.
@@ -35,9 +35,9 @@ description: Resolve the ask, plan one cheap bounded SELECT, run it once, then h
 11. Read the returned row count and error every time before deciding the data is right; a cheap query that answers the ask beats a broad one that needs a second pass.
 12. On a SQL error, rewrite once using `last_error`; do not invent objects to work around it.
 13. No `SELECT *` when `forbid_select_star` is on.
-14. Ask the operator one question when the ask is genuinely ambiguous (period, grouping, two plausible tables) instead of guessing wide.
+14. When the ask is genuinely ambiguous (period, grouping, two plausible tables), say so in `message` and stop. Orchester decides whether to ask the operator; never guess wide.
 15. Emit `goals` and `what_was_done` before handoff and finish with JSON.
-16. Reach the database only through the MCP-backed tool (`execute_select` / the configured SQL Server MCP) â€” never any other connection or path.
+16. Reach the database only through `ask_sql_expert` â€” never any other connection or path.
 
 ### Persian runs
 17. When the run is Persian (language=fa or a Persian ask), alias every user-facing output column to a Persian label (`SELECT â€¦ AS <Persian label>`) so Persian report tables carry Persian headers; the catalog identifiers in the query itself stay untranslated.

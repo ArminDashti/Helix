@@ -78,8 +78,8 @@
       "disconnected": "Disconnected",
       "lineTitle": "{{label}} {{state}}"
     },
-    "credit": "Dashti Technologies LLC (Armin Dashti)",
-    "version": "v{{version}}"
+    "credit": "Created by",
+    "creatorName": "Armin Dashti"
   },
   "errors": {
     "title": "Error",

@@ -21,6 +21,11 @@ AGENT_PIPELINE = [
         "name": "final-approver",
         "description": "Validate research/data, write the report text, hand the package to orchester",
     },
+    {
+        "id": "sql-expert",
+        "name": "sql-expert",
+        "description": "Turn plain-English data asks from other agents into one safe read-only SELECT",
+    },
 ]
 
 AGENT_IDS = [a["id"] for a in AGENT_PIPELINE]
