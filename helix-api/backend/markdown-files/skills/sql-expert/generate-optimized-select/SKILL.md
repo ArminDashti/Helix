@@ -11,11 +11,13 @@ Output: `{ sql, row_count, columns, rows_preview, notes }` or `{ error, reason }
 
 ## Allowed schemas
 
-Query ONLY these schemas: `Sales`, `Warehouse`, `dbo`, `global`, `Purchase`, `HumanResource`.
+**Hard rule — no exceptions.** Query ONLY these schemas: `Sales`, `Warehouse`, `Global`, `dbo`, `Purchase`, `HumanResource`. Do not touch any other schema even if the live catalog lists it.
 
-- Always schema-qualify every table and view, e.g. `Sales.Orders`, `dbo.Customers`. Never use an unqualified object name.
-- Never reference any other schema, in FROM, JOIN, subqueries, CTEs, or EXISTS clauses. This holds even if the live catalog shows the object.
-- If the answer needs a table outside these schemas, do not query it. Return `{ error, reason }` saying which table/schema is needed and that it is outside the allowed schemas.
+- Always schema-qualify every table and view, e.g. `Sales.Orders`, `[dbo].[Customers]`. Never use an unqualified object name.
+- Never reference any other schema in `FROM`, `JOIN`, subqueries, nested joins, CTE bodies, or `EXISTS`. CTE *names* are not tables; only base table/view references are gated.
+- Never use cross-database or linked-server forms: `OtherDb.schema.table`, three-part names with a database prefix, `OPENQUERY`, `OPENROWSET`, or linked-server paths.
+- Never query system catalogs or metadata views: `sys.*`, `INFORMATION_SCHEMA.*`, or engine equivalents.
+- If the answer needs any disallowed object, do not run SQL. Return `{ error, reason }` naming the object/schema and that it violates this allowlist.
 
 ## Procedure
 
@@ -30,7 +32,7 @@ Query ONLY these schemas: `Sales`, `Warehouse`, `dbo`, `global`, `Purchase`, `Hu
 ## Pre-flight checklist (must pass before execute)
 
 - Single statement, `SELECT` or `WITH ... SELECT` only. No DML, DDL, `EXEC`, `MERGE`, `;`-separated batches, or temp-table writes.
-- Every object is schema-qualified and belongs to an allowed schema (Sales, Warehouse, dbo, global, Purchase, HumanResource).
+- Every object is schema-qualified and belongs to an allowed schema only (`Sales`, `Warehouse`, `Global`, `dbo`, `Purchase`, `HumanResource`). No `sys`, `INFORMATION_SCHEMA`, other databases, unqualified names, or linked-server/cross-database syntax.
 - Row limit present: `TOP (n)` (SQL Server), `FETCH FIRST n ROWS ONLY`, or `LIMIT n` (SQLite/Postgres). `n` is at most the server row cap. Aggregations that return few groups still get a limit.
 - No `SELECT *`. List only the columns the answer needs.
 - At least one selective predicate on an indexed or key column, or an explicit date range. A query with no selective predicate on a large table is rejected. Narrow it first.
@@ -52,6 +54,7 @@ Refuse these and explain why in `reason`:
 - Functions on the filter column, leading-wildcard `LIKE`, or `OR` chains that cross indexed columns.
 - Any write, DDL, stored procedure call, or multi-statement batch.
 - Any object not in the live catalog.
+- Any table/view outside the allowed schemas, unqualified names, system catalogs (`sys`, `INFORMATION_SCHEMA`), or cross-database/linked-server syntax.
 
 ## Retries
 
