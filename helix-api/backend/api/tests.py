@@ -19,7 +19,9 @@ from .config_loader import (
     get_llm_base_url,
     get_llm_headers,
     get_openrouter_settings,
+    get_openrouter_token,
     get_provider,
+    load_config,
     restore_seed_pipeline_agents,
     save_config,
     update_openrouter_settings,
@@ -73,32 +75,23 @@ class PipelineAgentTests(SimpleTestCase):
                     self.assertNotIn(victim, ids_after)
 
 
-class FourAgentPipelineTests(SimpleTestCase):
-    def test_default_flow_uses_four_agent_spine(self):
+class ThreeAgentPipelineTests(SimpleTestCase):
+    def test_default_flow_uses_three_agent_spine(self):
         from .pipeline_graph import compile_pipeline_flow, default_pipeline_flow
 
         graph = compile_pipeline_flow(default_pipeline_flow())
         self.assertEqual(graph["entry"], "orchester")
         node_ids = [node["id"] for node in graph["nodes"]]
-        self.assertEqual(
-            node_ids,
-            ["orchester", "guardian", "researcher", "final-approver"],
+        self.assertEqual(node_ids, ["orchester", "sql-expert", "researcher"])
+
+    def test_prompt_hard_block_refuses_write_and_allows_grid_ask(self):
+        from .pipeline_run import _prompt_hard_block
+
+        self.assertIsNotNone(
+            _prompt_hard_block("DROP TABLE Sales.Moshtary", {"username": "armin", "is_admin": True})
         )
-
-    def test_guardian_blocks_write_prompt(self):
-        from .pipeline_run import _guardian_hard_block
-
-        blocked = _guardian_hard_block(
-            "DROP TABLE Sales.Moshtary",
-            {"username": "armin", "is_admin": True},
-        )
-        self.assertIsNotNone(blocked)
-
-    def test_guardian_allows_grid_ask(self):
-        from .pipeline_run import _guardian_hard_block
-
         self.assertIsNone(
-            _guardian_hard_block(
+            _prompt_hard_block(
                 "Show top selling products as a grid",
                 {"username": "guest", "is_admin": False, "is_guest": True},
             )
@@ -118,7 +111,7 @@ class FourAgentPipelineTests(SimpleTestCase):
         self.assertIn("YEAR(TarikhFaktor) = 1405", hint)
         self.assertIn("N'کرمان'", hint)
 
-    def test_langgraph_pipeline_gather_then_approve(self):
+    def test_langgraph_pipeline_inspect_fetch_process_validate(self):
         from . import markdown_store as store
         from .pipeline_run import _run_orchester
 
@@ -139,12 +132,13 @@ class FourAgentPipelineTests(SimpleTestCase):
             by_agent[agent_id] = by_agent.get(agent_id, 0) + 1
             prompts.setdefault(agent_id, []).append(messages)
             n = by_agent[agent_id]
-            if agent_id == "guardian":
+            if agent_id == "orchester":
+                # First call inspects the prompt, second validates the researcher's result.
                 return {
                     "role": "assistant",
-                    "content": '{"result":"pass","message":"allowed"}',
+                    "content": '{"result":"pass","goals":"top products","gaps":[],"message":"ok"}',
                 }
-            if agent_id == "researcher":
+            if agent_id == "sql-expert":
                 if n == 1:
                     return {
                         "role": "assistant",
@@ -160,20 +154,13 @@ class FourAgentPipelineTests(SimpleTestCase):
                             }
                         ],
                     }
+                return {"role": "assistant", "content": '{"ok":true,"notes":"one row"}'}
+            if agent_id == "researcher":
                 return {
                     "role": "assistant",
                     "content": (
-                        '{"goals":"top products","what_was_done":'
-                        '"SELECT returned 1 row","message":"gathered"}'
-                    ),
-                }
-            if agent_id == "final-approver":
-                return {
-                    "role": "assistant",
-                    "content": (
-                        '{"result":"pass","gaps":[],'
-                        '"text_report":"One row returned.",'
-                        '"message":"ok"}'
+                        '{"result":"done","what_was_done":"SELECT returned 1 row",'
+                        '"text_report":"One row returned.","message":"gathered"}'
                     ),
                 }
             return {"role": "assistant", "content": "{}"}
@@ -207,8 +194,7 @@ class FourAgentPipelineTests(SimpleTestCase):
         self.assertIn("ok", message.lower())
         self.assertIsNotNone(ctx.get("final_payload"))
         self.assertEqual(ctx["final_payload"]["text_report"], "One row returned.")
-        self.assertGreaterEqual(by_agent.get("researcher", 0), 1)
-        self.assertGreaterEqual(by_agent.get("final-approver", 0), 1)
+        self.assertEqual(by_agent, {"orchester": 2, "sql-expert": 2, "researcher": 1})
         # The knowledge document matching the prompt rides along with the researcher's system
         # prompt, and both the run totals and the payload carry what the run cost.
         researcher_system = str(prompts["researcher"][0][0]["content"])
@@ -233,10 +219,7 @@ class FourAgentPipelineTests(SimpleTestCase):
         }
         with patch("api.pipeline_run.execute_select") as exe:
             exe.side_effect = ValueError("Invalid object name")
-            result_json, done = _dispatch_tool(
-                "execute_select", {"sql": "SELECT 1"}, ctx
-            )
-        self.assertFalse(done)
+            result_json = _dispatch_tool("execute_select", {"sql": "SELECT 1"}, ctx)
         self.assertIn("Invalid object name", result_json)
         self.assertIn("Invalid object name", ctx.get("last_error") or "")
 
@@ -270,14 +253,6 @@ class FourAgentPipelineTests(SimpleTestCase):
         self.assertEqual(status, "fail")
         self.assertIn("not allowed", message.lower())
 
-    def test_orchester_self_retry_edge_on_failure(self):
-        from .pipeline_graph import compile_pipeline_flow, default_pipeline_flow, next_edge
-
-        graph = compile_pipeline_flow(default_pipeline_flow())
-        edge = next_edge(graph, "orchester", "fail", {})
-        self.assertIsNone(edge)
-        self.assertEqual(graph["entry"], "orchester")
-
     def test_default_edge_limit_is_one(self):
         from .pipeline_graph import DEFAULT_EDGE_LIMIT, compile_pipeline_flow, default_pipeline_flow
 
@@ -297,99 +272,33 @@ class FourAgentPipelineTests(SimpleTestCase):
             [n["id"] for n in default_graph["nodes"]],
         )
 
-    def test_four_agents_registered_in_roster(self):
-        for agent_id in (
-            "orchester",
-            "guardian",
-            "researcher",
-            "final-approver",
-            "sql-expert",
-        ):
-            self.assertIn(agent_id, AGENT_IDS)
+    def test_three_agents_registered_in_roster(self):
+        from .agents import AGENT_IDS, SUB_AGENT_IDS
 
-    def test_only_orchester_can_ask_the_operator(self):
-        from .pipeline_langgraph import _researcher_tools
+        self.assertEqual(AGENT_IDS, ["orchester", "sql-expert", "researcher"])
+        self.assertEqual(SUB_AGENT_IDS, [])
+
+    def test_only_orchester_and_researcher_can_ask_the_operator(self):
+        from .pipeline_langgraph import _RESUME_NODES, _researcher_tools
 
         names = {tool["function"]["name"] for tool in _researcher_tools()}
-        self.assertIn("ask_sql_expert", names)
-        self.assertNotIn("execute_select", names)
-        self.assertNotIn("ask_operator", names)
+        self.assertEqual(names, {"ask_sql_expert"})
+        self.assertEqual(set(_RESUME_NODES), {"orchester", "researcher"})
 
-    def test_web_searcher_registered_as_sub_agent(self):
-        from .agents import SUB_AGENT_IDS, is_sub_agent
-        from .config_loader import get_all_agent_metas
+    def test_retired_agents_are_not_pipeline_nodes(self):
+        from .pipeline_graph import normalize_pipeline_graph
 
-        self.assertIn("web-searcher", SUB_AGENT_IDS)
-        self.assertTrue(is_sub_agent("web-searcher"))
-        ids = {meta["id"] for meta in get_all_agent_metas()}
-        self.assertIn("web-searcher", ids)
-
-    def test_sub_agent_blocked_from_pipeline_graph(self):
-        from .pipeline_graph import default_pipeline_graph, normalize_pipeline_graph
-
-        graph = default_pipeline_graph()
         with self.assertRaises(ValueError):
             normalize_pipeline_graph(
                 {
-                    "entry": "web-searcher",
+                    "entry": "guardian",
                     "nodes": [
-                        {"id": "web-searcher", "position": {"x": 0, "y": 0}},
+                        {"id": "guardian", "position": {"x": 0, "y": 0}},
                         {"id": "orchester", "position": {"x": 0, "y": 100}},
                     ],
-                    "edges": [
-                        {
-                            "id": "e1",
-                            "source": "web-searcher",
-                            "target": "orchester",
-                            "when": {"type": "always"},
-                        }
-                    ],
+                    "edges": [],
                 }
             )
-        self.assertEqual(graph["entry"], "orchester")
-        self.assertNotIn("web-searcher", [n["id"] for n in graph["nodes"]])
-
-    def test_web_searcher_prompt_excludes_warehouse(self):
-        from . import markdown_store as store
-
-        with patch("api.db_dialects.list_tables", return_value=[{"schema": "Sales", "name": "Moshtary", "full_name": "Sales.Moshtary"}]):
-            with patch("api.docs_catalog.format_live_catalog_for_prompt", return_value="### Sales.Moshtary"):
-                prompt = store.assemble_agent_prompt("web-searcher")
-        self.assertNotIn("## Live catalog", prompt)
-        self.assertNotIn("Sales.Moshtary", prompt)
-        self.assertIn("web-searcher", prompt.lower())
-
-    def test_normalize_web_search_queries(self):
-        from .pipeline_run import _normalize_web_search_queries
-
-        self.assertEqual(
-            _normalize_web_search_queries([" inflation ", "rates", "rates", "", 4, 5, 6]),
-            ["inflation", "rates", "4"],
-        )
-
-    def test_search_web_tool_sets_brief(self):
-        from .pipeline_run import _dispatch_tool
-
-        ctx: dict = {"artifacts": {}}
-        with patch("api.pipeline_run.search_web") as search:
-            search.return_value = [
-                {
-                    "query": "retail margin",
-                    "title": "Bench",
-                    "url": "https://example.com",
-                    "snippet": "10%",
-                }
-            ]
-            with patch("api.pipeline_run.web_search_enabled", return_value=True):
-                result_json, done = _dispatch_tool(
-                    "search_web",
-                    {"queries": ["retail margin"], "objective": "benchmarks"},
-                    ctx,
-                )
-        self.assertFalse(done)
-        self.assertTrue(ctx.get("_web_search_invoked"))
-        self.assertIn("Bench", ctx.get("web_search_brief") or "")
-        self.assertIn('"ok":true', result_json.lower().replace(" ", ""))
 
     def test_assemble_prompt_includes_references_section(self):
         from . import markdown_store as store
@@ -413,7 +322,7 @@ class FourAgentPipelineTests(SimpleTestCase):
 
 
 class AgentAssetContractTests(SimpleTestCase):
-    """One skill per agent, catalog-agnostic text, web search gated by config."""
+    """One skill per agent, catalog-agnostic text, no retired agents."""
 
     def test_every_agent_has_exactly_one_skill(self):
         from . import markdown_store as store
@@ -428,7 +337,7 @@ class AgentAssetContractTests(SimpleTestCase):
     def test_agent_prompt_carries_skills_and_no_rules_section(self):
         from . import markdown_store as store
 
-        for agent_id in ("orchester", "guardian", "researcher", "final-approver"):
+        for agent_id in ("orchester", "sql-expert", "researcher"):
             prompt = store.assemble_agent_prompt(agent_id, include_warehouse=False)
             self.assertIn("## Skills", prompt, agent_id)
             self.assertNotIn("## Rules", prompt, agent_id)
@@ -507,42 +416,11 @@ class AgentAssetContractTests(SimpleTestCase):
             with patch("api.docs_catalog.format_live_catalog_for_prompt", return_value="### Sales.Moshtary"):
                 prompts = {
                     agent_id: store.assemble_agent_prompt(agent_id)
-                    for agent_id in ("orchester", "guardian", "researcher", "final-approver", "web-searcher")
+                    for agent_id in ("orchester", "sql-expert", "researcher")
                 }
         for agent_id, prompt in prompts.items():
             for token in banned:
                 self.assertNotIn(token, prompt.lower(), f"{agent_id} prompt names a {token}")
-
-    def test_web_search_tool_follows_the_disabled_agent_list(self):
-        from . import markdown_store as store  # noqa: F401  (ensures dirs exist)
-        from .config_loader import save_config
-        from .pipeline_run import active_tools
-
-        with tempfile.TemporaryDirectory() as tmp:
-            config_path = Path(tmp) / "helix.config.yaml"
-            with override_settings(HELIX_CONFIG_PATH=str(config_path)):
-                save_config({"disabled_agents": ["web-searcher"]})
-                off = [tool["function"]["name"] for tool in active_tools()]
-                self.assertNotIn("search_web", off)
-                self.assertIn("execute_select", off)
-                self.assertEqual(
-                    [tool["function"]["name"] for tool in active_tools(("execute_select", "search_web"))],
-                    ["execute_select"],
-                )
-                save_config({"disabled_agents": []})
-                on = [tool["function"]["name"] for tool in active_tools()]
-                self.assertIn("search_web", on)
-
-    def test_disabled_web_search_cannot_be_dispatched(self):
-        from .pipeline_run import _dispatch_tool
-
-        ctx: dict = {"artifacts": {}}
-        with patch("api.pipeline_run.web_search_enabled", return_value=False):
-            with patch("api.pipeline_run.search_web") as search:
-                payload, done = _dispatch_tool("search_web", {"queries": ["x"]}, ctx)
-        self.assertFalse(done)
-        self.assertIn("disabled", payload)
-        search.assert_not_called()
 
 
 class DocsCatalogPromptTests(SimpleTestCase):
@@ -755,6 +633,22 @@ class LlmSettingsTests(SimpleTestCase):
                 )
                 self.assertTrue(settings["token_configured"])
 
+    def test_each_connector_keeps_its_own_saved_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "helix.config.yaml"
+            with override_settings(HELIX_CONFIG_PATH=str(config_path)):
+                save_config({"provider": "openrouter"})
+                update_openrouter_settings({"token": "or-key"})
+                update_provider("opencode_go")
+                self.assertEqual(get_openrouter_token(), "")
+                update_openrouter_settings({"token": "oc-key"})
+                self.assertEqual(get_openrouter_token(), "oc-key")
+                update_provider("openrouter")
+                self.assertEqual(get_openrouter_token(), "or-key")
+                self.assertEqual(
+                    load_config()["openrouter"]["tokens"],
+                    {"openrouter": "or-key", "opencode_go": "oc-key"},
+                )
 
     def test_opencode_go_requests_carry_a_user_agent(self):
         """Cloudflare answers urllib's default User-Agent with 403/1010 on opencode.ai."""
@@ -972,7 +866,7 @@ class LlmSettingsTests(SimpleTestCase):
 
                 with patch("api.llm_client.urllib.request.urlopen", _fake_urlopen):
                     complete_chat_messages(
-                        "guardian",
+                        "sql-expert",
                         [{"role": "user", "content": "ping"}],
                         session_id="run-1",
                     )
@@ -1028,7 +922,7 @@ class LlmSettingsTests(SimpleTestCase):
         """The Settings form PUTs back what it was given, so no known agent may be missing."""
         from .config_loader import get_agent_model
 
-        agents = ("guardian", "researcher", "final-approver")
+        agents = ("orchester", "sql-expert", "researcher")
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "helix.config.yaml"
             with override_settings(HELIX_CONFIG_PATH=str(config_path)):
@@ -1068,7 +962,7 @@ class LlmSettingsTests(SimpleTestCase):
                 save_config({"provider": "opencode_go", "openrouter": {}})
                 settings = get_openrouter_settings()
                 self.assertEqual(
-                    settings["agents"]["final-approver"]["model"],
+                    settings["agents"]["sql-expert"]["model"],
                     "deepseek-v4-flash",
                 )
 
@@ -1100,8 +994,8 @@ class PausedRunStoreTests(_PauseSpoolMixin, SimpleTestCase):
         ctx = {"run_id": "run-spool-1", "prompt": "hi", "clarifications": []}
         run_store.pause_run(
             ctx,
-            agent_id="guardian",
-            node="guardian",
+            agent_id="researcher",
+            node="researcher",
             questions=[{"id": "q1", "text": "Which cost column?"}],
         )
         # Another worker (or a restart): the in-memory registry is gone, the spool is not.
@@ -1109,8 +1003,8 @@ class PausedRunStoreTests(_PauseSpoolMixin, SimpleTestCase):
 
         item = run_store.pop_paused("run-spool-1")
         self.assertIsNotNone(item)
-        self.assertEqual(item["agent_id"], "guardian")
-        self.assertEqual(item["node"], "guardian")
+        self.assertEqual(item["agent_id"], "researcher")
+        self.assertEqual(item["node"], "researcher")
         self.assertEqual(item["questions"][0]["id"], "q1")
         self.assertEqual(item["ctx"]["prompt"], "hi")
         # Consumed once: answering again must not replay the run.
@@ -1173,30 +1067,6 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
                 events.append(json.loads(line[5:].strip()))
         return events
 
-    @staticmethod
-    def _researcher_script():
-        """Researcher turns: one SELECT, then the completion JSON."""
-        return [
-            {
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [
-                    {
-                        "id": "r1",
-                        "type": "function",
-                        "function": {
-                            "name": "execute_select",
-                            "arguments": json.dumps({"sql": "SELECT TOP 1 1 AS n"}),
-                        },
-                    }
-                ],
-            },
-            {
-                "role": "assistant",
-                "content": '{"goals":"g","what_was_done":"SELECT 1 row","message":"gathered"}',
-            },
-        ]
-
     def _chat(self, answers, seen=None):
         """Fake LLM. ``answers`` maps agent id to responses consumed in call order.
 
@@ -1224,10 +1094,31 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
         return ""
 
     SELECT = {"sql": "SELECT TOP 1 1 AS n", "columns": ["n"], "rows": [{"n": 1}]}
-    PASS_GUARDIAN = {"role": "assistant", "content": '{"result":"pass","message":"allowed"}'}
-    APPROVE = {
+    PASS = {
         "role": "assistant",
-        "content": '{"result":"pass","gaps":[],"text_report":"One row.","message":"ok"}',
+        "content": '{"result":"pass","goals":"top products","gaps":[],"message":"ok"}',
+    }
+    SQL_CALL = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "s1",
+                "type": "function",
+                "function": {
+                    "name": "execute_select",
+                    "arguments": json.dumps({"sql": "SELECT TOP 1 1 AS n"}),
+                },
+            }
+        ],
+    }
+    SQL_OK = {"role": "assistant", "content": '{"ok":true,"notes":"one row"}'}
+    RESEARCHER_DONE = {
+        "role": "assistant",
+        "content": (
+            '{"result":"done","what_was_done":"SELECT returned 1 row",'
+            '"text_report":"One row.","message":"gathered"}'
+        ),
     }
 
     def test_orchester_asks_before_the_run_and_the_answer_starts_it(self):
@@ -1241,13 +1132,15 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
                 "orchester": [
                     {
                         "role": "assistant",
-                        "content": '{"questions":["Which period should the report cover?"]}',
+                        "content": (
+                            '{"result":"needs_input","goals":"top products",'
+                            '"questions":["Which period should the report cover?"]}'
+                        ),
                     },
-                    {"role": "assistant", "content": "{}"},
+                    self.PASS,
                 ],
-                "guardian": [self.PASS_GUARDIAN],
-                "researcher": self._researcher_script(),
-                "final-approver": [self.APPROVE],
+                "sql-expert": [self.SQL_CALL, self.SQL_OK],
+                "researcher": [self.RESEARCHER_DONE],
             },
             seen,
         )
@@ -1263,9 +1156,9 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
         self.assertEqual(questions[0]["run_id"], ctx["run_id"])
         self.assertEqual([q["id"] for q in questions[0]["questions"]], ["q1"])
         self.assertIn("period", questions[0]["questions"][0]["text"])
-        # Parked, not finished: no result yet, and the run is waiting for an answer.
+        # Parked before any database work: no result, no SQL, and the run waits for an answer.
         self.assertNotIn("result", [event.get("event") for event in events])
-        self.assertNotIn("researcher", seen)
+        self.assertNotIn("sql-expert", seen)
         self.assertIsNotNone(run_store.peek_paused(ctx["run_id"]))
 
         seen.clear()
@@ -1279,59 +1172,20 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
             ctx["clarifications"],
             [{"question": "Which period should the report cover?", "answer": "last quarter"}],
         )
-        # The answer reaches the agents that run after the pause.
-        self.assertIn("last quarter", self._user_prompt(seen["researcher"][-1]))
+        # The answer reaches the agent that runs after the pause.
+        self.assertIn("last quarter", self._user_prompt(seen["sql-expert"][0]))
         self.assertIsNone(run_store.peek_paused(ctx["run_id"]))
-
-    @staticmethod
-    def _ask_sql_expert_call(request: str):
-        return {
-            "role": "assistant",
-            "content": None,
-            "tool_calls": [
-                {
-                    "id": "r1",
-                    "type": "function",
-                    "function": {
-                        "name": "ask_sql_expert",
-                        "arguments": json.dumps({"request": request}),
-                    },
-                }
-            ],
-        }
 
     def test_researcher_gets_rows_from_sql_expert(self):
         from . import markdown_store as store
 
         ctx = self._ctx()
         seen: dict[str, list] = {}
-        sql_call = {
-            "role": "assistant",
-            "content": None,
-            "tool_calls": [
-                {
-                    "id": "s1",
-                    "type": "function",
-                    "function": {
-                        "name": "execute_select",
-                        "arguments": json.dumps({"sql": "SELECT TOP 1 1 AS n"}),
-                    },
-                }
-            ],
-        }
         fake_chat = self._chat(
             {
-                "orchester": [{"role": "assistant", "content": "{}"}],
-                "guardian": [self.PASS_GUARDIAN],
-                "researcher": [
-                    self._ask_sql_expert_call("count one row"),
-                    *self._researcher_script()[1:],
-                ],
-                "sql-expert": [
-                    sql_call,
-                    {"role": "assistant", "content": '{"ok":true,"notes":"one row"}'},
-                ],
-                "final-approver": [self.APPROVE],
+                "orchester": [self.PASS, self.PASS],
+                "sql-expert": [self.SQL_CALL, self.SQL_OK],
+                "researcher": [self.RESEARCHER_DONE],
             },
             seen,
         )
@@ -1341,8 +1195,9 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
                 with patch.object(store, "assemble_agent_prompt", return_value="system"):
                     events = self._drain(ctx)
 
-        self.assertIn("sql-expert", seen)
         self.assertEqual(ctx["sql_fetch"]["rows"], self.SELECT["rows"])
+        # The researcher works from the rows sql-expert fetched, not from its own SQL.
+        self.assertIn('"n": 1', self._user_prompt(seen["researcher"][0]))
         self.assertEqual(ctx["_orchester_outcome"][0], "done")
         self.assertNotIn("question", [event.get("event") for event in events])
 
@@ -1354,35 +1209,16 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
         fake_chat = self._chat(
             {
                 "orchester": [
-                    {"role": "assistant", "content": "{}"},
+                    self.PASS,
                     {"role": "assistant", "content": '{"action":"ask","question":"Which period?"}'},
-                ],
-                "guardian": [self.PASS_GUARDIAN],
-                "researcher": [
-                    self._ask_sql_expert_call("sales last period"),
-                    *self._researcher_script()[1:],
-                    self._ask_sql_expert_call("sales last quarter"),
-                    *self._researcher_script()[1:],
+                    self.PASS,
                 ],
                 "sql-expert": [
                     {"role": "assistant", "content": '{"ok":false,"reason":"period missing"}'},
-                    {
-                        "role": "assistant",
-                        "content": None,
-                        "tool_calls": [
-                            {
-                                "id": "s1",
-                                "type": "function",
-                                "function": {
-                                    "name": "execute_select",
-                                    "arguments": json.dumps({"sql": "SELECT TOP 1 1 AS n"}),
-                                },
-                            }
-                        ],
-                    },
-                    {"role": "assistant", "content": '{"ok":true,"notes":"quarter"}'},
+                    self.SQL_CALL,
+                    self.SQL_OK,
                 ],
-                "final-approver": [self.APPROVE],
+                "researcher": [self.RESEARCHER_DONE],
             },
             seen,
         )
@@ -1404,24 +1240,19 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
                     resumed = self._resume(ctx["run_id"], {"q1": "last quarter"})
 
         self.assertEqual(resumed[-1]["event"], "result")
-        # Orchester sent the run back to researcher, which carried the operator's answer.
-        self.assertIn("last quarter", self._user_prompt(seen["researcher"][-1]))
+        # Orchester sent the run back to sql-expert, which carried the operator's answer.
+        self.assertIn("last quarter", self._user_prompt(seen["sql-expert"][0]))
 
-    def test_guardian_needs_input_pauses_instead_of_failing(self):
+    def test_researcher_question_pauses_and_resumes_into_researcher(self):
         from . import markdown_store as store
 
         ctx = self._ctx()
         seen: dict[str, list] = {}
         fake_chat = self._chat(
             {
-                "orchester": [
-                    {"role": "assistant", "content": "{}"},
-                    {
-                        "role": "assistant",
-                        "content": '{"action":"ask","question":"Which cost column do you mean?"}',
-                    },
-                ],
-                "guardian": [
+                "orchester": [self.PASS, self.PASS],
+                "sql-expert": [self.SQL_CALL, self.SQL_OK],
+                "researcher": [
                     {
                         "role": "assistant",
                         "content": (
@@ -1429,10 +1260,8 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
                             '"question":"Which cost column do you mean?"}'
                         ),
                     },
-                    self.PASS_GUARDIAN,
+                    self.RESEARCHER_DONE,
                 ],
-                "researcher": self._researcher_script(),
-                "final-approver": [self.APPROVE],
             },
             seen,
         )
@@ -1443,11 +1272,9 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
                     events = self._drain(ctx)
 
         questions = [event for event in events if event.get("event") == "question"]
-        self.assertEqual([q["agent_id"] for q in questions], ["orchester"])
+        self.assertEqual([q["agent_id"] for q in questions], ["researcher"])
         self.assertEqual(questions[0]["questions"][0]["text"], "Which cost column do you mean?")
-        # needs_input is a pause, not the guardian's reject path.
-        self.assertNotIn("fail", [event.get("result") for event in events])
-        self.assertNotIn("researcher", seen)
+        self.assertNotIn("result", [event.get("event") for event in events])
 
         seen.clear()
         with patch("api.pipeline_langgraph.complete_chat_messages", side_effect=fake_chat):
@@ -1456,7 +1283,9 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
                     resumed = self._resume(ctx["run_id"], {"q1": "TotalCost"})
 
         self.assertEqual(resumed[-1]["event"], "result")
-        self.assertIn("TotalCost", self._user_prompt(seen["researcher"][-1]))
+        # The run resumed at researcher, and its prompt carries the operator's answer.
+        self.assertNotIn("sql-expert", seen)
+        self.assertIn("TotalCost", self._user_prompt(seen["researcher"][0]))
 
     def test_answering_an_unknown_run_reports_expired(self):
         events = self._resume("nope-not-a-run", {"q1": "x"})
@@ -1693,7 +1522,7 @@ class TokenUsageTests(SimpleTestCase):
         from .token_usage import record_call, snapshot
 
         ctx: dict = {}
-        record_call(ctx, "guardian", messages=[{"role": "user", "content": "x" * 400}], reply="y" * 40)
+        record_call(ctx, "orchester", messages=[{"role": "user", "content": "x" * 400}], reply="y" * 40)
         totals = snapshot(ctx)
         self.assertTrue(totals["estimated"])
         self.assertGreater(totals["total_tokens"], 0)
@@ -1703,7 +1532,7 @@ class TokenUsageTests(SimpleTestCase):
         from .token_usage import record_call, snapshot
 
         ctx: dict = {}
-        record_call(ctx, "guardian", messages=[], reply="a", usage={"total_tokens": 10})
+        record_call(ctx, "orchester", messages=[], reply="a", usage={"total_tokens": 10})
         record_call(ctx, "researcher", messages=[], reply="b", usage={"total_tokens": 25})
         record_call(ctx, "researcher", messages=[], reply="c", usage={"total_tokens": 5})
         totals = snapshot(ctx)

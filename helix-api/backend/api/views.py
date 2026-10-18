@@ -1351,7 +1351,7 @@ def admin_users(request: HttpRequest) -> JsonResponse:
     plain = str(body.get("data_access_plain") or "")
     review = review_data_access_policy(plain, is_admin=is_admin)
     if not review.get("accepted"):
-        return _error(str(review.get("message") or "Guardian rejected data access"), 400)
+        return _error(str(review.get("message") or "Orchester rejected data access"), 400)
     try:
         item = org.create_user(
             str(body.get("username") or ""),
@@ -1400,7 +1400,7 @@ def admin_user_detail(request: HttpRequest, user_id: str) -> JsonResponse:
         review = review_data_access_policy(plain, is_admin=is_admin)
         if not review.get("accepted"):
             return _error(
-                str(review.get("message") or "Guardian rejected data access"), 400
+                str(review.get("message") or "Orchester rejected data access"), 400
             )
         body = {
             **body,

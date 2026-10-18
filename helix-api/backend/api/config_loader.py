@@ -138,7 +138,6 @@ DEFAULT_LLM_MODEL = "composer-2.5"
 
 DEFAULT_AGENT_MODELS = {
     "orchester": DEFAULT_LLM_MODEL,
-    "web-searcher": DEFAULT_LLM_MODEL,
 }
 
 DEFAULT_OPENROUTER = {
@@ -300,7 +299,7 @@ def _drop_stale_pipeline_graph(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-_DEFAULT_PIPELINE_AGENT_IDS = ("orchester", "guardian", "researcher", "final-approver")
+_DEFAULT_PIPELINE_AGENT_IDS = ("orchester", "sql-expert", "researcher")
 
 
 def _ensure_single_orchester_pipeline(data: dict[str, Any]) -> dict[str, Any]:
@@ -352,6 +351,23 @@ def _migrate_cursor_provider(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _migrate_provider_tokens(data: dict[str, Any]) -> dict[str, Any]:
+    """Move the legacy single `openrouter.token` under the connector it was saved for."""
+    raw = data.get("openrouter")
+    if not isinstance(raw, dict) or "token" not in raw:
+        return data
+    section = dict(raw)
+    legacy = str(section.pop("token") or "").strip()
+    provider = str(data.get("provider") or "").strip().lower()
+    if provider not in VALID_PROVIDERS:
+        provider = DEFAULT_PROVIDER
+    tokens = _stored_tokens(section)
+    if legacy:
+        tokens.setdefault(provider, legacy)
+    section["tokens"] = tokens
+    return {**data, "openrouter": section}
+
+
 def load_config() -> dict[str, Any]:
     path = ensure_config_exists()
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -359,7 +375,9 @@ def load_config() -> dict[str, Any]:
         data = {}
     migrated = _ensure_single_orchester_pipeline(
         _drop_stale_pipeline_graph(
-            _migrate_legacy_agent_ids(_migrate_cursor_provider(data))
+            _migrate_legacy_agent_ids(
+                _migrate_provider_tokens(_migrate_cursor_provider(data))
+            )
         )
     )
     if not isinstance(migrated, dict):
@@ -652,16 +670,18 @@ def get_openrouter_token_env() -> str:
     return _token_env_from_section(raw, provider_default_token_env(get_provider()))
 
 
-def _section_stored_token(raw: Any) -> str:
-    if not isinstance(raw, dict):
-        return ""
-    return str(raw.get("token") or "").strip()
+def _stored_tokens(raw: Any) -> dict[str, str]:
+    """API keys saved from Settings, one per connector id."""
+    tokens = raw.get("tokens") if isinstance(raw, dict) else None
+    if not isinstance(tokens, dict):
+        return {}
+    return {str(key).strip().lower(): str(value or "").strip() for key, value in tokens.items()}
 
 
 def get_openrouter_token() -> str:
-    """LLM API key from Settings (config), then optional env fallback."""
+    """LLM API key saved for the active connector in Settings, then its env fallback."""
     data = load_config()
-    token = _section_stored_token(data.get("openrouter"))
+    token = _stored_tokens(data.get("openrouter")).get(get_provider(), "")
     if token:
         return token
     return os.environ.get(get_openrouter_token_env(), "").strip()
@@ -843,13 +863,13 @@ def update_openrouter_settings(payload: dict[str, Any]) -> dict[str, Any]:
     provider = get_provider()
     current = get_openrouter_settings()
     raw = data.get("openrouter") if isinstance(data.get("openrouter"), dict) else {}
-    stored_token = _section_stored_token(raw)
+    stored_tokens = _stored_tokens(raw)
     stored_env = _token_env_from_section(raw, provider_default_token_env(provider))
 
     if "token" in payload:
         incoming = payload.get("token")
         if incoming is not None and str(incoming).strip():
-            stored_token = str(incoming).strip()
+            stored_tokens[provider] = str(incoming).strip()
     if "token_env" in payload:
         stored_env = _normalize_token_env(
             payload["token_env"], DEFAULT_OPENROUTER_TOKEN_ENV
@@ -891,8 +911,8 @@ def update_openrouter_settings(payload: dict[str, Any]) -> dict[str, Any]:
     }
     if "timeout_seconds" in raw:
         section["timeout_seconds"] = raw["timeout_seconds"]
-    if stored_token:
-        section["token"] = stored_token
+    if stored_tokens:
+        section["tokens"] = stored_tokens
     data["openrouter"] = section
     save_config(data)
     _MODELS_CACHE["fetched_at"] = 0.0
@@ -1119,15 +1139,6 @@ def get_disabled_agent_ids() -> set[str]:
     if not isinstance(raw, list):
         return set()
     return {str(item).strip() for item in raw if str(item).strip()}
-
-
-def web_search_enabled() -> bool:
-    """Web search is off while the web-searcher sub-agent is disabled.
-
-    The tool list follows this: a disabled capability must not stay callable through
-    `search_web`, and no agent prompt may advertise it.
-    """
-    return "web-searcher" not in get_disabled_agent_ids()
 
 
 def set_agent_disabled(agent_id: str, disabled: bool) -> dict[str, Any]:

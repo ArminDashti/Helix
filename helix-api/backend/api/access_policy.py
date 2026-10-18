@@ -1,4 +1,4 @@
-"""Guardian review of plain-language per-user data access."""
+"""Orchester review of plain-language per-user data access."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ def review_data_access_policy(
     is_admin: bool = False,
 ) -> dict[str, Any]:
     """
-    Ask the guardian LLM to accept/reject a plain-language data-access policy.
+    Ask the orchester LLM to accept/reject a plain-language data-access policy.
 
     Returns:
       { "accepted": bool, "message": str, "allowed_tables": list[str],
@@ -80,7 +80,7 @@ def review_data_access_policy(
     catalog = _catalog_tables()
     catalog_blob = ", ".join(catalog[:200])
     system = (
-        "You are the Helix guardian agent reviewing a new company user's "
+        "You are the Helix orchester agent reviewing a new company user's "
         "data-access policy written in plain language.\n"
         "Rules:\n"
         "1. Accept only SELECT-only analytics access to named tables.\n"
@@ -100,10 +100,10 @@ def review_data_access_policy(
 
     try:
         require_llm()
-        raw = complete_chat("guardian", user, system)
+        raw = complete_chat("orchester", user, system)
         parsed = parse_json_object(raw)
     except Exception as exc:
-        # Fail closed for non-admins when guardian cannot run.
+        # Fail closed for non-admins when orchester cannot run.
         heuristic = _match_tables_from_text(cleaned, catalog)
         if heuristic and not any(
             bad in cleaned.lower()
@@ -111,19 +111,19 @@ def review_data_access_policy(
         ):
             return {
                 "accepted": True,
-                "message": f"Guardian unavailable ({exc}); accepted via table-name match.",
+                "message": f"Orchester unavailable ({exc}); accepted via table-name match.",
                 "allowed_tables": heuristic,
                 "data_access_plain": cleaned,
             }
         return {
             "accepted": False,
-            "message": f"Guardian could not review access policy: {exc}",
+            "message": f"Orchester could not review access policy: {exc}",
             "allowed_tables": [],
             "data_access_plain": cleaned,
         }
 
     result = str(parsed.get("result") or "").strip().lower()
-    message = str(parsed.get("message") or "").strip() or "Guardian rejected the access policy."
+    message = str(parsed.get("message") or "").strip() or "Orchester rejected the access policy."
     raw_tables = parsed.get("allowed_tables")
     allowed: list[str] = []
     catalog_lower = {name.lower(): name for name in catalog}
@@ -145,7 +145,7 @@ def review_data_access_policy(
             return {
                 "accepted": False,
                 "message": message
-                or "Guardian accepted but could not map any catalog tables.",
+                or "Orchester accepted but could not map any catalog tables.",
                 "allowed_tables": [],
                 "data_access_plain": cleaned,
             }

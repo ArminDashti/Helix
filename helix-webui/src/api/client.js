@@ -39,13 +39,9 @@ export class ApiError extends Error {
   }
 }
 
-const GUARDIAN_AGENT_IDS = new Set(["guardian", "task_validator"]);
-
 function isStreamRejection(payload) {
   if (!payload || typeof payload !== "object") return false;
-  if (payload.kind === "rejection") return true;
-  const agentId = String(payload.agent_id || "").trim();
-  return GUARDIAN_AGENT_IDS.has(agentId);
+  return payload.kind === "rejection";
 }
 
 function apiUrl(path) {

@@ -22,13 +22,9 @@ openrouter:
   agents:
     orchester:
       model: "composer-2.5"
-    guardian:
+    sql-expert:
       model: "composer-2.5"
     researcher:
-      model: "composer-2.5"
-    final-approver:
-      model: "composer-2.5"
-    web-searcher:
       model: "composer-2.5"
 
 app:
@@ -91,10 +87,7 @@ sql:
   max_rows: 10000 # used only when require_row_limit is true
 
 # Agents switched off at runtime. The same list is what Settings → Agents toggles.
-# web-searcher is off by default: the agent, its rule, and its skill still ship, but the
-# researcher's search_web tool is not offered to the model while it is disabled.
-disabled_agents:
-  - web-searcher
+disabled_agents: []
 
 # Pipeline layout is stored in helix.config.yaml as pipeline_graph (runner)
 # and pipeline_flow (Arrange stages: IF / IF NOT / Proceed). Edit in the UI.

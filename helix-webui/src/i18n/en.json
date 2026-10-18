@@ -45,7 +45,11 @@
     "dbExplorer": "DB Explorer",
     "admin": "Admin",
     "settings": "Settings",
-    "aboutMe": "About Me"
+    "aboutMe": "About Me",
+    "groups": {
+      "analyze": "Analyze",
+      "configure": "Configure"
+    }
   },
   "layout": {
     "brand": "Helix",
@@ -801,7 +805,7 @@
     "dataAccess": "Data access",
     "dataAccessAdmin": "Full SELECT (admin)",
     "dataAccessPlaceholder": "e.g. May read SalesOrderHeader and Customer for analytics only",
-    "dataAccessHint": "Describe in plain language which data this user may access. The guardian agent accepts or rejects before the user is saved.",
+    "dataAccessHint": "Describe in plain language which data this user may access. The orchester agent accepts or rejects before the user is saved.",
     "guideLink": "Admin guide (PDF)"
   },
   "guide": {

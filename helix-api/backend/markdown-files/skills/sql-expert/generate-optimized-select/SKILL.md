@@ -59,4 +59,4 @@ Refuse these and explain why in `reason`:
 - Read-only, and only through `execute_select`. No other connection or path.
 - Never return credentials, connection strings, or raw schema dumps to the caller.
 - Never run a query that was rejected by the checklist.
-- Do not call `submit_result`. Return the result object to the calling agent.
+- Return the result object to the calling agent.

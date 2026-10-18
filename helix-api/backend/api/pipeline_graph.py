@@ -61,7 +61,7 @@ def default_pipeline_graph() -> dict[str, Any]:
 
 
 def default_pipeline_flow() -> dict[str, Any]:
-    """Seed: orchester → guardian → researcher → final-approver."""
+    """Seed: Human → orchester → sql-expert → researcher → orchester."""
     return {
         "type": "stages",
         "children": [
@@ -70,11 +70,11 @@ def default_pipeline_flow() -> dict[str, Any]:
                 "agent_id": "orchester",
                 "action": "proceed",
                 "then": "proceed",
-                "next_agent_id": "guardian",
+                "next_agent_id": "sql-expert",
             },
             {
                 "type": "stage",
-                "agent_id": "guardian",
+                "agent_id": "sql-expert",
                 "action": "proceed",
                 "then": "proceed",
                 "next_agent_id": "researcher",
@@ -83,13 +83,6 @@ def default_pipeline_flow() -> dict[str, Any]:
                 "type": "stage",
                 "agent_id": "researcher",
                 "action": "proceed",
-                "then": "proceed",
-                "next_agent_id": "final-approver",
-            },
-            {
-                "type": "stage",
-                "agent_id": "final-approver",
-                "action": "proceed",
                 "then": "stop",
             },
         ],
@@ -97,7 +90,7 @@ def default_pipeline_flow() -> dict[str, Any]:
 
 
 def research_pipeline_flow() -> dict[str, Any]:
-    """Research mode uses the same four-agent seed (LangGraph runtime)."""
+    """Research mode uses the same three-agent seed (LangGraph runtime)."""
     return default_pipeline_flow()
 
 

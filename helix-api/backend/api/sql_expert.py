@@ -55,10 +55,10 @@ def _fail(ctx: dict[str, Any], reason: str) -> dict[str, Any]:
 def run_sql_request(request: str, ctx: dict[str, Any]) -> dict[str, Any]:
     from .pipeline_langgraph import _llm, _parse_json_object
     from .pipeline_run import (
+        EXECUTE_SELECT_TOOL,
         _assistant_message_for_history,
         _dispatch_tool,
         _parse_tool_args,
-        active_tools,
     )
 
     ask = str(request or "").strip()
@@ -70,7 +70,7 @@ def run_sql_request(request: str, ctx: dict[str, Any]) -> dict[str, Any]:
         {"role": "system", "content": system},
         {"role": "user", "content": f"Data request (plain English):\n{ask}"},
     ]
-    tools = active_tools(("execute_select",))
+    tools = [EXECUTE_SELECT_TOOL]
     result: dict[str, Any] | None = None
 
     for _turn in range(MAX_TURNS):
@@ -99,7 +99,7 @@ def run_sql_request(request: str, ctx: dict[str, Any]) -> dict[str, Any]:
             if name != "execute_select":
                 content = json.dumps({"ok": False, "error": f"{name} is not available here"})
             else:
-                content, _done = _dispatch_tool(name, _parse_tool_args(fn.get("arguments")), ctx)
+                content = _dispatch_tool(name, _parse_tool_args(fn.get("arguments")), ctx)
                 payload = json.loads(content)
                 if payload.get("ok"):
                     result = {

@@ -4,55 +4,38 @@ AGENT_PIPELINE = [
     {
         "id": "orchester",
         "name": "Orchester",
-        "description": "Supervise the pipeline: route work, read agent inbox, package SSE for the UI",
-    },
-    {
-        "id": "guardian",
-        "name": "guardian",
-        "description": "Block dangerous or off-product prompts and check the caller's permission",
-    },
-    {
-        "id": "researcher",
-        "name": "researcher",
-        "description": "Connect to the live catalog, run SELECT gathers, optional web search",
-    },
-    {
-        "id": "final-approver",
-        "name": "final-approver",
-        "description": "Validate research/data, write the report text, hand the package to orchester",
+        "description": "Inspect the human prompt, set goals, ask the operator, validate the result, package it for the UI",
     },
     {
         "id": "sql-expert",
         "name": "sql-expert",
-        "description": "Turn plain-English data asks from other agents into one safe read-only SELECT",
+        "description": "Turn plain-English data asks into one safe read-only SELECT and return the rows",
+    },
+    {
+        "id": "researcher",
+        "name": "researcher",
+        "description": "Process the SQL rows against the goals and write the result; may ask the operator",
     },
 ]
 
 AGENT_IDS = [a["id"] for a in AGENT_PIPELINE]
 AGENT_BY_ID = {a["id"]: a for a in AGENT_PIPELINE}
 
-# No separate phase-only roster — the four pipeline agents are the runtime graph.
+# No separate phase-only roster — the three pipeline agents are the runtime graph.
 PHASE_AGENT_PIPELINE: list[dict] = []
 PHASE_AGENT_IDS: list[str] = []
 PHASE_AGENT_BY_ID: dict[str, dict] = {}
 
-# Sub-agents: registered for prompts/models/admin, but not pipeline graph steps.
-SUB_AGENT_PIPELINE = [
-    {
-        "id": "web-searcher",
-        "name": "web-searcher",
-        "description": "Search the public web when researcher requests external context (sub-agent only)",
-        "sub_agent": True,
-    },
-]
+# No sub-agents in this build.
+SUB_AGENT_PIPELINE: list[dict] = []
 
 SUB_AGENT_IDS = [a["id"] for a in SUB_AGENT_PIPELINE]
 SUB_AGENT_BY_ID = {a["id"]: a for a in SUB_AGENT_PIPELINE}
 
-# Seed markdown for pipeline agents and web-searcher.
 SYNC_AGENT_IDS = AGENT_IDS + SUB_AGENT_IDS
 ALL_BUILTIN_AGENT_BY_ID = {**AGENT_BY_ID, **SUB_AGENT_BY_ID}
 
+# Retired agent ids. Saved config that still names them is dropped on load, never routed to.
 LEGACY_AGENT_IDS = frozenset(
     {
         "task_validator",
@@ -69,31 +52,35 @@ LEGACY_AGENT_IDS = frozenset(
         "validator",
         "result-builder",
         "publisher",
+        "guardian",
+        "final-approver",
+        "web-searcher",
     }
 )
 
+# Legacy ids whose duties now belong to a live agent. Ids not listed here are dropped outright.
 LEGACY_AGENT_RENAMES = {
     "task_validator": "orchester",
     "solution_strategist": "orchester",
     "technical_architect": "orchester",
     "code_builder": "orchester",
-    "sql": "orchester",
-    "sql_fetcher": "researcher",
-    "sql_guardian": "guardian",
-    "response_builder": "final-approver",
-    "response_publisher": "final-approver",
+    "sql": "sql-expert",
+    "sql_fetcher": "sql-expert",
+    "sql_guardian": "orchester",
+    "response_builder": "researcher",
+    "response_publisher": "orchester",
     "implementation_auditor": "orchester",
-    "data-gatherer": "researcher",
-    "validator": "final-approver",
-    "result-builder": "final-approver",
-    "publisher": "final-approver",
+    "data-gatherer": "sql-expert",
+    "validator": "orchester",
+    "result-builder": "researcher",
+    "publisher": "orchester",
 }
 
 _RUNTIME_PIPELINE_AGENT_IDS = frozenset(AGENT_IDS)
 
 
 def resolve_agent_definition_id(agent_id: str) -> str:
-    """Map graph instance id (e.g. guardian__2) to roster agent id."""
+    """Map graph instance id (e.g. researcher__2) to roster agent id."""
     if "__" in agent_id:
         base = agent_id.rsplit("__", 1)[0]
         if base in _RUNTIME_PIPELINE_AGENT_IDS:
@@ -119,6 +106,6 @@ def is_phase_agent(agent_id: str) -> bool:
 
 
 def is_pipeline_agent(agent_id: str) -> bool:
-    """True for graph-eligible agents (orchester, guardian, researcher, final-approver)."""
+    """True for graph-eligible agents (orchester, sql-expert, researcher)."""
     rid = resolve_agent_definition_id(agent_id)
     return rid in AGENT_BY_ID

@@ -113,15 +113,25 @@ export default function Layout() {
     company_logo_data_url: "",
   });
 
-  const mainLinks = [
-    { to: "/", label: t("nav.analysis"), icon: BarChart3, end: true },
-    { to: "/results", label: t("nav.results"), icon: Play },
-    { to: "/canvas", label: t("nav.canvas"), icon: LayoutTemplate },
-    { to: "/skills", label: t("nav.skills"), icon: Sparkles },
-    { to: "/agents", label: t("nav.agents"), icon: Bot },
-    { to: "/knowledge", label: t("nav.knowledge"), icon: BookOpen },
-    { to: "/mcp", label: t("nav.mcp"), icon: Plug },
-    { to: "/db-explorer", label: t("nav.dbExplorer"), icon: Database },
+  const navGroups = [
+    {
+      labelKey: "nav.groups.analyze",
+      links: [
+        { to: "/", label: t("nav.analysis"), icon: BarChart3, end: true },
+        { to: "/results", label: t("nav.results"), icon: Play },
+        { to: "/canvas", label: t("nav.canvas"), icon: LayoutTemplate },
+        { to: "/db-explorer", label: t("nav.dbExplorer"), icon: Database },
+      ],
+    },
+    {
+      labelKey: "nav.groups.configure",
+      links: [
+        { to: "/skills", label: t("nav.skills"), icon: Sparkles },
+        { to: "/agents", label: t("nav.agents"), icon: Bot },
+        { to: "/knowledge", label: t("nav.knowledge"), icon: BookOpen },
+        { to: "/mcp", label: t("nav.mcp"), icon: Plug },
+      ],
+    },
   ];
 
   const footerLinks = [

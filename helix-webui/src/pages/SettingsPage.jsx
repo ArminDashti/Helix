@@ -83,13 +83,7 @@ const EMPTY_OPENROUTER = {
   token_configured: false,
 };
 
-const LLM_AGENT_IDS = [
-  "orchester",
-  "guardian",
-  "researcher",
-  "final-approver",
-  "web-searcher",
-];
+const LLM_AGENT_IDS = ["orchester", "sql-expert", "researcher"];
 
 // The API is the source of truth for which connectors exist; these keys only translate the ones
 // the webui already knows. A connector added server-side still shows up here, labelled by the API.
@@ -1013,13 +1007,7 @@ export default function SettingsPage() {
     : Object.keys(agentNameById);
   const filteredLlmAgents = LLM_AGENT_IDS.filter(
     (id) =>
-      [
-        "orchester",
-        "guardian",
-        "researcher",
-        "final-approver",
-        "web-searcher",
-      ].includes(id) || agentIdPool.includes(id),
+      LLM_AGENT_IDS.includes(id) || agentIdPool.includes(id),
   );
   const agentIds = sortStrings(filteredLlmAgents, locale).sort((a, b) =>
     compareAz(agentLabel(a), agentLabel(b), locale),

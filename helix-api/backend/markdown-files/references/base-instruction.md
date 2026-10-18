@@ -16,10 +16,10 @@ Aliases: `analysis` / `research` → `analytical_report`; `both` → `analytical
 
 ## Pipeline order
 
-1. **guardian** — gate the prompt; may stop the run
-2. **researcher** — one cheap SELECT and a row-capped fetch
-3. **final-approver** — validate the fetch and write the report text
-4. **orchester** — package report / grid / chart for the UI
+1. **orchester** — inspect the prompt and set goals; may ask the operator
+2. **sql-expert** — one optimized, bounded SELECT and the row-capped fetch
+3. **researcher** — process the rows against the goals and write the result; may ask the operator
+4. **orchester** — validate the result against the goals and package report / grid / chart for the UI
 
 Do not skip steps or impersonate another agent's job.
 
