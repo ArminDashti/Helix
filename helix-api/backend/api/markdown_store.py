@@ -22,17 +22,14 @@ SKILL_DISPLAY_NAMES = {
     "echarts-response": "ECharts response",
     "sql-safety": "SQL safety",
     "text-report": "Text report",
-    "gather-data": "gather-data",
-    "publish-result": "publish-result",
+    "process-data": "process-data",
     "package-ui-payload": "Package UI payload",
     "understand-database": "Understand database",
     "generate-grid": "Generate grid",
     "generate-analytical-report": "Generate analytical report",
-    "guard-prompt": "guard-prompt",
     "match-prompt-goal": "Match prompt goal",
     "conduct-research": "Conduct research",
     "aggregate-research-brief": "Aggregate research brief",
-    "search-web": "search-web",
 }
 
 

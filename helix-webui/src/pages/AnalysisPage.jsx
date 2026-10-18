@@ -286,11 +286,7 @@ export default function AnalysisPage() {
       ]);
     } else if (event?.event === "error" && event.error) {
       const body = translateKnownMessage(t, String(event.error));
-      if (
-        event.kind === "rejection" ||
-        event.agent_id === "guardian" ||
-        event.agent_id === "task_validator"
-      ) {
+      if (event.kind === "rejection") {
         setRunError({
           kind: "rejection",
           title: t("errors.rejection.title"),

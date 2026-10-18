@@ -2,19 +2,10 @@
   "orchester/orchestrate-pipeline": [
     "orchester"
   ],
-  "guardian/guard-prompt": [
-    "guardian"
-  ],
-  "researcher/gather-data": [
-    "researcher"
-  ],
-  "final-approver/publish-result": [
-    "final-approver"
-  ],
   "sql-expert/generate-optimized-select": [
     "sql-expert"
   ],
-  "web-searcher/search-web": [
-    "web-searcher"
+  "researcher/process-data": [
+    "researcher"
   ]
 }

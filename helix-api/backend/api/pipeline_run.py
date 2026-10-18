@@ -1,4 +1,4 @@
-"""Single-agent Orchester tool loop — Cursor-style until submit_result."""
+"""Shared pipeline plumbing: step events, tools, SQL dispatch, result packaging, run lifecycle."""
 
 from __future__ import annotations
 
@@ -11,116 +11,42 @@ from . import logs_store
 from . import markdown_store as store
 from . import token_usage
 from .chart_payload import build_echarts_option, build_grid
-from .config_loader import get_provider, provider_label, web_search_enabled
+from .config_loader import get_provider, provider_label
 from .demo import VALID_CHART_TYPES, _normalize_report_type
 from .jalali_dates import calendar_hint_for_prompt
-from .llm_client import complete_chat_messages, require_llm
+from .llm_client import require_llm
 from .pipeline_graph import (
     agent_display_name,
     get_pipeline_graph_for_mode,
 )
 from .sql_execute import _sql_error_message, execute_select
 from .user_intent import resolve_user_intent
-from .web_search import search_web
 
 DATA_GATHERER_MAX_ROWS = 500
 MAX_STEP_LOG_ENTRIES = 30
 FAILURE_STEP_SNAPSHOT = 20
 MAX_TOOL_TURNS = 16
 
-ORCHESTER_TOOLS: list[dict[str, Any]] = [
-    {
-        "type": "function",
-        "function": {
-            "name": "execute_select",
-            "description": (
-                "Run one cheap SELECT (or CTE+SELECT) against the allowlisted database. "
-                "Always include TOP/FETCH. Prefer catalog.schema.table names from the prompt."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "sql": {
-                        "type": "string",
-                        "description": "Single SELECT (or WITH … SELECT) statement",
-                    },
+EXECUTE_SELECT_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "execute_select",
+        "description": (
+            "Run one cheap SELECT (or CTE+SELECT) against the allowlisted database. "
+            "Always include TOP/FETCH. Prefer catalog.schema.table names from the prompt."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sql": {
+                    "type": "string",
+                    "description": "Single SELECT (or WITH â€¦ SELECT) statement",
                 },
-                "required": ["sql"],
             },
+            "required": ["sql"],
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_web",
-            "description": (
-                "Search the public web for facts outside the connected database "
-                "(benchmarks, news, industry rates). Pass 1–3 short queries."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "queries": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "1–3 search queries",
-                    },
-                    "objective": {
-                        "type": "string",
-                        "description": "Why these queries matter for the user prompt",
-                    },
-                },
-                "required": ["queries"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "submit_result",
-            "description": (
-                "Finish the run. Provide text_report from executed SQL preview numbers "
-                "(do not invent figures). Server packages grid and chart from sql_fetch."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "text_report": {
-                        "type": "string",
-                        "description": "User-facing report text",
-                    },
-                    "chart_type": {
-                        "type": "string",
-                        "description": "Optional chart type hint (bar, line, pie, …)",
-                    },
-                    "message": {
-                        "type": "string",
-                        "description": "Short status message for the UI",
-                    },
-                },
-                "required": ["text_report"],
-            },
-        },
-    },
-]
-
-def active_tools(names: tuple[str, ...] | None = None) -> list[dict[str, Any]]:
-    """Tools the model may call right now.
-
-    `search_web` disappears while web-searcher is disabled: a disabled capability must not stay
-    callable, so declaration and dispatch are filtered from the same source.
-    """
-    blocked = set() if web_search_enabled() else {"search_web"}
-    out: list[dict[str, Any]] = []
-    for tool in ORCHESTER_TOOLS:
-        fn = tool.get("function") if isinstance(tool, dict) else None
-        tool_name = str((fn or {}).get("name") or "")
-        if tool_name in blocked:
-            continue
-        if names is not None and tool_name not in names:
-            continue
-        out.append(tool)
-    return out
+}
 
 
 def _append_step_log(
@@ -266,7 +192,7 @@ def _operator_answers_text(ctx: dict[str, Any]) -> str:
     if not isinstance(answers, list) or not answers:
         return ""
     lines = [
-        "Operator answers (already given — use them and do not ask these again):"
+        "Operator answers (already given â€” use them and do not ask these again):"
     ]
     for item in answers:
         if not isinstance(item, dict):
@@ -418,7 +344,7 @@ _DANGEROUS_SNIPPETS = (
 )
 
 
-def _guardian_hard_block(prompt: str, actor: dict[str, Any]) -> str | None:
+def _prompt_hard_block(prompt: str, actor: dict[str, Any]) -> str | None:
     text = prompt or ""
     lowered = text.lower()
     if any(snippet in lowered for snippet in _DANGEROUS_SNIPPETS):
@@ -452,30 +378,17 @@ def _report_length_hint(level: str, language: str) -> str:
         key = "medium"
     if language == "fa":
         mapping = {
-            "low": "طول گزارش: حدود ۱ تا ۲ خط.",
-            "medium": "طول گزارش: حدود ۴ تا ۵ خط.",
-            "high": "طول گزارش: حدود ۸ تا ۹ خط.",
+            "low": "Ø·ÙˆÙ„ Ú¯Ø²Ø§Ø±Ø´: Ø­Ø¯ÙˆØ¯ Û± ØªØ§ Û² Ø®Ø·.",
+            "medium": "Ø·ÙˆÙ„ Ú¯Ø²Ø§Ø±Ø´: Ø­Ø¯ÙˆØ¯ Û´ ØªØ§ Ûµ Ø®Ø·.",
+            "high": "Ø·ÙˆÙ„ Ú¯Ø²Ø§Ø±Ø´: Ø­Ø¯ÙˆØ¯ Û¸ ØªØ§ Û¹ Ø®Ø·.",
         }
     else:
         mapping = {
-            "low": "Report length: about 1–2 lines.",
-            "medium": "Report length: about 4–5 lines.",
-            "high": "Report length: about 8–9 lines.",
+            "low": "Report length: about 1â€“2 lines.",
+            "medium": "Report length: about 4â€“5 lines.",
+            "high": "Report length: about 8â€“9 lines.",
         }
     return mapping[key]
-
-
-def _normalize_web_search_queries(raw: Any) -> list[str]:
-    if not isinstance(raw, list):
-        return []
-    queries: list[str] = []
-    for item in raw:
-        text = str(item or "").strip()
-        if text and text not in queries:
-            queries.append(text)
-        if len(queries) >= 3:
-            break
-    return queries
 
 
 def _normalize_chart_types(ctx: dict[str, Any]) -> list[str]:
@@ -505,7 +418,7 @@ def _package_result(ctx: dict[str, Any]) -> dict[str, Any]:
     text_report = ctx.get("text_report")
     if not text_report:
         artifacts = ctx.get("artifacts") or {}
-        for key in ("final-approver", "orchester", "result-builder", "publisher"):
+        for key in ("researcher", "orchester"):
             pub = artifacts.get(key) or {}
             text_report = pub.get("text")
             if text_report:
@@ -515,7 +428,7 @@ def _package_result(ctx: dict[str, Any]) -> dict[str, Any]:
         text_report = (
             f"Query returned {count} rows."
             if language != "fa"
-            else f"پرس‌وجو {count} ردیف برگرداند."
+            else f"Ù¾Ø±Ø³â€ŒÙˆØ¬Ùˆ {count} Ø±Ø¯ÛŒÙ Ø¨Ø±Ú¯Ø±Ø¯Ø§Ù†Ø¯."
         )
     echarts_option = None
     echarts_options: list[dict[str, Any]] = []
@@ -564,35 +477,16 @@ def _package_result(ctx: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _tool_contract_suffix(ctx: dict[str, Any]) -> str:
+def _report_contract(ctx: dict[str, Any]) -> str:
+    """Language and length rules for the text_report an agent writes."""
     language = _result_language(ctx)
     report_level = _normalize_report_type(ctx.get("report_type"))
-    parts = [
-        "",
-        "## Tools",
-        "",
-        "You are the sole Helix agent. Use tools until the ask is done:",
-        "- execute_select — read-only SELECT; always TOP/FETCH; names from live catalog.",
-        *(
-            ["- search_web — public facts only when the database cannot answer."]
-            if web_search_enabled()
-            else []
-        ),
-        "- submit_result — finish with text_report grounded in sql_fetch preview numbers.",
-        "Do not invent figures. Call submit_result exactly once when finished.",
-        _report_length_hint(report_level, language),
-    ]
-    if language == "fa":
-        parts.append(
-            "Write text_report (and user-visible message) in Persian (فارسی). "
-            "Keep SQL identifiers unchanged."
-        )
-    else:
-        parts.append(
-            "Write text_report (and user-visible message) in English. "
-            "Keep SQL identifiers unchanged."
-        )
-    return "\n".join(parts)
+    lang_line = (
+        "Write text_report (and message) in Persian (ÙØ§Ø±Ø³ÛŒ). Keep SQL identifiers unchanged."
+        if language == "fa"
+        else "Write text_report (and message) in English. Keep SQL identifiers unchanged."
+    )
+    return f"{_report_length_hint(report_level, language)}\n{lang_line}"
 
 
 def _build_user_message(ctx: dict[str, Any]) -> str:
@@ -637,119 +531,33 @@ def _parse_tool_args(raw: Any) -> dict[str, Any]:
     return {}
 
 
-def _dispatch_tool(
-    name: str,
-    args: dict[str, Any],
-    ctx: dict[str, Any],
-) -> tuple[str, bool]:
-    """Run one tool. Returns (result_json, done) where done means submit_result finished."""
-    language = ctx.get("language") or "en"
-    if name == "execute_select":
-        sql_text = str(args.get("sql") or "").strip()
-        if not sql_text:
-            return json.dumps({"ok": False, "error": "sql is required"}), False
-        try:
-            fetch = execute_select(
-                sql_text, row_cap=DATA_GATHERER_MAX_ROWS, actor=ctx.get("actor")
-            )
-        except Exception as exc:  # noqa: BLE001
-            err = _sql_error_message(exc)
-            ctx["last_error"] = err
-            return json.dumps({"ok": False, "error": err}), False
-        ctx["sql_fetch"] = fetch
-        ctx.pop("last_error", None)
-        rows = fetch.get("rows") or []
-        return (
-            json.dumps(
-                {
-                    "ok": True,
-                    "sql": fetch.get("sql"),
-                    "columns": fetch.get("columns"),
-                    "row_count": len(rows),
-                    "preview": rows[:20],
-                },
-                ensure_ascii=False,
-                default=str,
-            ),
-            False,
-        )
-
-    if name == "search_web":
-        if not web_search_enabled():
-            return json.dumps({"ok": False, "error": "web search is disabled"}), False
-        queries = _normalize_web_search_queries(args.get("queries"))
-        if not queries:
-            return json.dumps({"ok": False, "error": "queries required (1–3)"}), False
-        if ctx.get("_web_search_invoked"):
-            return (
-                json.dumps(
-                    {
-                        "ok": True,
-                        "cached": True,
-                        "web_search_brief": ctx.get("web_search_brief") or "",
-                    },
-                    ensure_ascii=False,
-                ),
-                False,
-            )
-        hits = search_web(queries)
-        ctx["_web_search_invoked"] = True
-        brief_lines = []
-        for hit in hits:
-            if hit.get("error"):
-                brief_lines.append(f"- error ({hit.get('query')}): {hit.get('error')}")
-                continue
-            title = hit.get("title") or "result"
-            url = hit.get("url") or ""
-            snippet = hit.get("snippet") or ""
-            if url:
-                brief_lines.append(f"- [{title}]({url}): {snippet}")
-            else:
-                brief_lines.append(f"- {title}: {snippet}")
-        objective = str(args.get("objective") or "").strip()
-        brief = ""
-        if objective:
-            brief += f"Objective: {objective}\n"
-        brief += "\n".join(brief_lines) if brief_lines else "No web results."
-        ctx["web_search_brief"] = brief
-        ctx.setdefault("artifacts", {})["web-search"] = {
-            "queries": queries,
-            "hit_count": len(hits),
-            "text": brief,
-        }
-        return (
-            json.dumps(
-                {"ok": True, "web_search_brief": brief, "hit_count": len(hits)},
-                ensure_ascii=False,
-            ),
-            False,
-        )
-
-    if name == "submit_result":
-        text_report = str(args.get("text_report") or "").strip()
-        if not text_report:
-            return json.dumps({"ok": False, "error": "text_report is required"}), False
-        chart_type = str(args.get("chart_type") or "").strip()
-        if chart_type:
-            ctx["chart_type"] = chart_type
-        ctx["text_report"] = text_report
-        message = str(args.get("message") or "").strip() or _ui_text(
-            language, "Published result", "نتیجه منتشر شد"
-        )
-        try:
-            ctx["final_payload"] = _package_result(ctx)
-        except Exception as exc:  # noqa: BLE001
-            err = _sql_error_message(exc)
-            ctx["last_error"] = err
-            return json.dumps({"ok": False, "error": err}), False
-        ctx.setdefault("artifacts", {})["orchester"] = {
-            "message": message,
-            "text": text_report,
-        }
-        ctx["_submit_message"] = message
-        return json.dumps({"ok": True, "message": message}), True
-
-    return json.dumps({"ok": False, "error": f"Unknown tool: {name}"}), False
+def _dispatch_tool(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> str:
+    """Run one tool and return its result as JSON."""
+    if name != "execute_select":
+        return json.dumps({"ok": False, "error": f"Unknown tool: {name}"})
+    sql_text = str(args.get("sql") or "").strip()
+    if not sql_text:
+        return json.dumps({"ok": False, "error": "sql is required"})
+    try:
+        fetch = execute_select(sql_text, row_cap=DATA_GATHERER_MAX_ROWS, actor=ctx.get("actor"))
+    except Exception as exc:  # noqa: BLE001
+        err = _sql_error_message(exc)
+        ctx["last_error"] = err
+        return json.dumps({"ok": False, "error": err})
+    ctx["sql_fetch"] = fetch
+    ctx.pop("last_error", None)
+    rows = fetch.get("rows") or []
+    return json.dumps(
+        {
+            "ok": True,
+            "sql": fetch.get("sql"),
+            "columns": fetch.get("columns"),
+            "row_count": len(rows),
+            "preview": rows[:20],
+        },
+        ensure_ascii=False,
+        default=str,
+    )
 
 
 def _assistant_message_for_history(message: dict[str, Any]) -> dict[str, Any]:
@@ -771,7 +579,7 @@ def _orchester_events(
     *,
     entry: str | None = None,
 ) -> Iterator[dict[str, Any]]:
-    """Yield step events from the LangGraph four-agent pipeline.
+    """Yield step events from the LangGraph pipeline (orchester → sql-expert → researcher).
 
     ``entry`` re-enters the graph at a node instead of at orchester — that is how a run parked on
     an operator question continues where it stopped.
@@ -779,175 +587,6 @@ def _orchester_events(
     from .pipeline_langgraph import langgraph_events
 
     yield from langgraph_events(ctx, entry=entry)
-    return
-
-    # Legacy single-agent tool loop kept below for reference / emergency rollback.
-    language = ctx.get("language") or "en"
-    blocked = _guardian_hard_block(str(ctx.get("prompt") or ""), ctx.get("actor") or {})
-    if blocked:
-        ctx["last_error"] = blocked
-        yield _step_event(
-            ctx,
-            agent_id="orchester",
-            node_id="orchester",
-            status="failed",
-            message=blocked,
-            result="fail",
-        )
-        ctx["_orchester_outcome"] = ("fail", blocked)
-        return
-
-    system = store.assemble_agent_prompt("orchester") + _tool_contract_suffix(ctx)
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": _build_user_message(ctx)},
-    ]
-
-    for turn in range(1, MAX_TOOL_TURNS + 1):
-        yield _step_event(
-            ctx,
-            agent_id="orchester",
-            node_id="orchester",
-            status="running",
-            message=_ui_text(
-                language,
-                f"Orchester turn {turn}/{MAX_TOOL_TURNS}…",
-                f"نوبت Orchester {turn}/{MAX_TOOL_TURNS}…",
-            ),
-        )
-        try:
-            assistant = complete_chat_messages(
-                "orchester",
-                messages,
-                tools=active_tools(),
-                session_id=str(ctx.get("run_id") or ""),
-            )
-        except Exception as exc:  # noqa: BLE001
-            err = _sql_error_message(exc)
-            ctx["last_error"] = err
-            yield _step_event(
-                ctx,
-                agent_id="orchester",
-                node_id="orchester",
-                status="failed",
-                message=err,
-            )
-            ctx["_orchester_outcome"] = ("failed", err)
-            return
-
-        tool_calls = assistant.get("tool_calls")
-        if not isinstance(tool_calls, list) or not tool_calls:
-            content = str(assistant.get("content") or "").strip()
-            # Allow bare submit via JSON in content as last resort
-            if content.startswith("{") and "text_report" in content:
-                try:
-                    parsed = json.loads(content)
-                except json.JSONDecodeError:
-                    parsed = {}
-                if isinstance(parsed, dict) and parsed.get("text_report"):
-                    result_json, done = _dispatch_tool("submit_result", parsed, ctx)
-                    yield _step_event(
-                        ctx,
-                        agent_id="orchester",
-                        node_id="orchester",
-                        status="done" if done else "failed",
-                        message=str(parsed.get("message") or content[:200]),
-                    )
-                    if done:
-                        ctx["_orchester_outcome"] = (
-                            "done",
-                            str(ctx.get("_submit_message") or "Published result"),
-                        )
-                        return
-                    ctx["_orchester_outcome"] = (
-                        "failed",
-                        json.loads(result_json).get("error") or "submit_result failed",
-                    )
-                    return
-            err = _ui_text(
-                language,
-                "Orchester returned no tool calls; call execute_select / search_web / submit_result",
-                "Orchester بدون tool_calls برگشت؛ execute_select / search_web / submit_result را صدا بزنید",
-            )
-            ctx["last_error"] = err
-            yield _step_event(
-                ctx,
-                agent_id="orchester",
-                node_id="orchester",
-                status="failed",
-                message=err,
-            )
-            ctx["_orchester_outcome"] = ("failed", err)
-            return
-
-        messages.append(_assistant_message_for_history(assistant))
-        finished = False
-        for call in tool_calls:
-            if not isinstance(call, dict):
-                continue
-            fn = call.get("function") if isinstance(call.get("function"), dict) else {}
-            name = str(fn.get("name") or "").strip()
-            args = _parse_tool_args(fn.get("arguments"))
-            call_id = str(call.get("id") or name or "tool")
-            yield _step_event(
-                ctx,
-                agent_id="orchester",
-                node_id="orchester",
-                status="running",
-                message=_ui_text(
-                    language,
-                    f"Tool {name}…",
-                    f"ابزار {name}…",
-                ),
-            )
-            result_json, done = _dispatch_tool(name, args, ctx)
-            try:
-                parsed_result = json.loads(result_json)
-                tool_ok = bool(isinstance(parsed_result, dict) and parsed_result.get("ok"))
-            except json.JSONDecodeError:
-                tool_ok = False
-            yield _step_event(
-                ctx,
-                agent_id="orchester",
-                node_id="orchester",
-                status="done" if (done or tool_ok) else "failed",
-                message=_ui_text(
-                    language,
-                    f"{name} → {result_json[:180]}",
-                    f"{name} → {result_json[:180]}",
-                ),
-            )
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": call_id,
-                    "content": result_json,
-                }
-            )
-            if done:
-                finished = True
-                break
-        if finished:
-            ctx["_orchester_outcome"] = (
-                "done",
-                str(ctx.get("_submit_message") or "Published result"),
-            )
-            return
-
-    err = _ui_text(
-        language,
-        f"Orchester exceeded {MAX_TOOL_TURNS} tool turns without submit_result",
-        f"Orchester بیش از {MAX_TOOL_TURNS} نوبت بدون submit_result اجرا شد",
-    )
-    ctx["last_error"] = err
-    yield _step_event(
-        ctx,
-        agent_id="orchester",
-        node_id="orchester",
-        status="failed",
-        message=err,
-    )
-    ctx["_orchester_outcome"] = ("failed", err)
 
 
 def _run_orchester(ctx: dict[str, Any]) -> tuple[str, str]:
@@ -996,15 +635,15 @@ def pipeline_events(
         intent_msg = _ui_text(
             language,
             f"Resolved user intent from DB table {db_intent.get('source_table')}: {str(ctx.get('prompt') or '')[:100]}",
-            f"نیت کاربر از جدول {db_intent.get('source_table')} بازیابی شد: {str(ctx.get('prompt') or '')[:100]}",
+            f"Ù†ÛŒØª Ú©Ø§Ø±Ø¨Ø± Ø§Ø² Ø¬Ø¯ÙˆÙ„ {db_intent.get('source_table')} Ø¨Ø§Ø²ÛŒØ§Ø¨ÛŒ Ø´Ø¯: {str(ctx.get('prompt') or '')[:100]}",
         )
     else:
         checked = ", ".join(db_intent.get("checked_tables") or []) or "catalog"
         detail = db_intent.get("error") or f"checked {checked}"
         intent_msg = _ui_text(
             language,
-            f"DB intent lookup ({checked}): {detail[:120]} — using raw prompt",
-            f"جست‌وجوی نیت در DB ({checked}): {detail[:120]} — استفاده از پرامپت خام",
+            f"DB intent lookup ({checked}): {detail[:120]} â€” using raw prompt",
+            f"Ø¬Ø³Øªâ€ŒÙˆØ¬ÙˆÛŒ Ù†ÛŒØª Ø¯Ø± DB ({checked}): {detail[:120]} â€” Ø§Ø³ØªÙØ§Ø¯Ù‡ Ø§Ø² Ù¾Ø±Ø§Ù…Ù¾Øª Ø®Ø§Ù…",
         )
     yield _sse(
         _step_event(
@@ -1023,7 +662,7 @@ def pipeline_events(
     user_message = _ui_text(
         language,
         f"Received prompt ({mode}/{language}) via {provider_name}: {effective_prompt[:120]}",
-        f"درخواست دریافت شد ({mode}/{language}) از {provider_name}: {effective_prompt[:120]}",
+        f"Ø¯Ø±Ø®ÙˆØ§Ø³Øª Ø¯Ø±ÛŒØ§ÙØª Ø´Ø¯ ({mode}/{language}) Ø§Ø² {provider_name}: {effective_prompt[:120]}",
     )
     yield _sse(
         _step_event(
@@ -1044,7 +683,7 @@ def pipeline_events(
             agent_id="orchester",
             node_id="orchester",
             status="running",
-            message=_ui_text(language, f"Running {display}…", f"در حال اجرای {display}…"),
+            message=_ui_text(language, f"Running {display}â€¦", f"Ø¯Ø± Ø­Ø§Ù„ Ø§Ø¬Ø±Ø§ÛŒ {display}â€¦"),
         )
     )
 
@@ -1142,7 +781,7 @@ def resume_pipeline_events(run_id: str, answers: dict[str, Any]) -> Iterator[str
             {
                 "event": "error",
                 "error": (
-                    "This question expired — the run was dropped by the server. "
+                    "This question expired â€” the run was dropped by the server. "
                     "Start the analysis again."
                 ),
                 "kind": "pause_expired",
@@ -1222,7 +861,7 @@ def run_pipeline_sync(
         # Only the streaming endpoint can answer a paused run, so a synchronous caller is told to
         # use it rather than being handed a question it has no way to reply to.
         raise ValueError(
-            f"This run is waiting for an answer: {question} — continue it from /api/runs/stream "
+            f"This run is waiting for an answer: {question} â€” continue it from /api/runs/stream "
             "and /api/runs/<run_id>/answer."
         )
     if not result:

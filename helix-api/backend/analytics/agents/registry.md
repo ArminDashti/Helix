@@ -3,22 +3,17 @@
 Pipeline (LangGraph):
 
 ```text
-orchester → guardian → researcher → final-approver → orchester (package)
+Human → orchester → sql-expert → researcher → orchester → Human
 ```
 
-| # | Id | Rule | Skill | When to use |
-|---|-----|------|-------|-------------|
-| 1 | `orchester` | `orchester` | `orchestrate-pipeline` | Route the run, package SSE for the UI |
-| 2 | `guardian` | `guard-prompt` | `guard-prompt` | Block unsafe / off-product prompts |
-| 3 | `researcher` | `database-sql` | `gather-data` | Live catalog SELECT against the Settings database |
-| 4 | `final-approver` | `build-result` | `publish-result` | Validate the fetch, write `text_report`, hand off |
+| # | Id | Skill | Talks to the human | When to use |
+|---|----|-------|--------------------|-------------|
+| 1 | `orchester` | `orchestrate-pipeline` | Yes (ask up to 3 questions, or one per blocked worker) | Inspect the prompt, set goals, route the run, validate the result, package it for the UI |
+| 2 | `sql-expert` | `generate-optimized-select` | No | Turn a plain-English data ask into one read-only, bounded SELECT and return the rows |
+| 3 | `researcher` | `process-data` | Yes (one question when only the operator can settle an ambiguity) | Process the rows against the goals, write the result, ask sql-expert for one more number when needed |
 
-**Sub-agents** (not graph nodes):
+Interaction is two-way: a worker that fails or is blocked reports upstream, and orchester decides a retry (once), a question, or stop. Researcher can call sql-expert for more data.
 
-| Id | Rule | Skill | When to use |
-|----|------|-------|-------------|
-| `web-searcher` | `web-search-only` | `search-web` | Public web search — **disabled by default** (`disabled_agents: [web-searcher]`) |
-
-One rule and one skill per agent; nothing else is assigned.
+One skill per agent; nothing else is assigned.
 
 **Models:** `openrouter.agents.<id>.model` in `helix.config.yaml`. Never hardcode models in `AGENT.md`.

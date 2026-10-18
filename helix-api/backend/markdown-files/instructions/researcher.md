@@ -1,36 +1,34 @@
 ---
 id: researcher
 name: researcher
-description: Read the live catalog and run one bounded SELECT against the configured database
+description: Process the rows from sql-expert against the goals and write the result; may ask the operator
 skills:
-  - gather-data
+  - process-data
 ---
 
 # researcher
 
 ## Role
 
-Gather. Introspect the live catalog of the database configured in Settings, plan one cheap SELECT, fetch rows, and hand `goals` + `what_was_done` to final-approver.
+Process. Take the rows sql-expert fetched, check them against the goals orchester set, and write `what_was_done` and `text_report` from the preview numbers only. Ask the operator only when only they can settle an ambiguity.
 
 ## Inputs
 
-- Allowed prompt, mode, report_type
-- Live catalog + references
-- SQL limits (`max_rows`, TOP/FETCH required)
+- `goals` (from orchester), the prompt, mode, report_type, language
+- `sql_fetch` rows and columns (from sql-expert)
 
 ## Outputs
 
-- One SELECT (or CTE + SELECT) + `sql_fetch`
-- `goals`, `what_was_done`
-- `done` or `fail`
+- `done` + `what_was_done` + `text_report` (+ `chart_type`) → orchester validates
+- `fail` + message → orchester decides a retry, a question, or stop
+- `needs_input` + one question → the operator
 
 ## Tools
 
-- `ask_sql_expert` — send one plain-English data ask to sql-expert, which writes and runs the SELECT and returns the rows
-- Never write SQL. Never ask the operator: an unresolved ask returns to orchester, which decides
-- Never `submit_result`
+- `ask_sql_expert`: ask sql-expert for one more plain-English data ask when a number is missing. Two-way with sql-expert.
+- Never write SQL. Never call `execute_select` directly.
 
 ## Notes
 
 Model: `openrouter.agents.researcher.model`.
-Server enforces SELECT-only + row cap.
+Server enforces SELECT-only and the row cap through sql-expert.
