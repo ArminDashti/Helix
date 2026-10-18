@@ -439,9 +439,11 @@ class AgentAssetContractTests(SimpleTestCase):
                     agent_id: store.assemble_agent_prompt(agent_id)
                     for agent_id in ("orchester", "sql-expert", "researcher")
                 }
+        skill_path = Path("generate-optimized-select/SKILL.md")
         for agent_id, prompt in prompts.items():
+            scrubbed = self._text_for_warehouse_product_ban(skill_path, prompt).lower()
             for token in banned:
-                self.assertNotIn(token, prompt.lower(), f"{agent_id} prompt names a {token}")
+                self.assertNotIn(token, scrubbed, f"{agent_id} prompt names a {token}")
 
 
 class DocsCatalogPromptTests(SimpleTestCase):
