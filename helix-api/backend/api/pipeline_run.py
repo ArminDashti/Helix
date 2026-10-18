@@ -40,7 +40,7 @@ EXECUTE_SELECT_TOOL: dict[str, Any] = {
             "properties": {
                 "sql": {
                     "type": "string",
-                    "description": "Single SELECT (or WITH â€¦ SELECT) statement",
+                    "description": "Single SELECT (or WITH … SELECT) statement",
                 },
             },
             "required": ["sql"],
@@ -148,16 +148,10 @@ def _ui_text(language: str, en: str, fa: str) -> str:
     return fa if language == "fa" else en
 
 
-def _prompt_looks_persian(text: str) -> bool:
-    return any("\u0600" <= ch <= "\u06ff" for ch in (text or ""))
-
-
 def _result_language(ctx: dict[str, Any]) -> str:
-    if (ctx.get("language") or "en") == "fa":
-        return "fa"
-    if _prompt_looks_persian(str(ctx.get("prompt") or "")):
-        return "fa"
-    return "en"
+    # Report language follows the app locale only; a Persian prompt must not
+    # switch it (English app → English report, even for Persian requests).
+    return "fa" if (ctx.get("language") or "en") == "fa" else "en"
 
 
 def _sse(data: dict[str, Any]) -> str:
@@ -192,7 +186,7 @@ def _operator_answers_text(ctx: dict[str, Any]) -> str:
     if not isinstance(answers, list) or not answers:
         return ""
     lines = [
-        "Operator answers (already given â€” use them and do not ask these again):"
+        "Operator answers (already given — use them and do not ask these again):"
     ]
     for item in answers:
         if not isinstance(item, dict):
@@ -378,15 +372,15 @@ def _report_length_hint(level: str, language: str) -> str:
         key = "medium"
     if language == "fa":
         mapping = {
-            "low": "Ø·ÙˆÙ„ Ú¯Ø²Ø§Ø±Ø´: Ø­Ø¯ÙˆØ¯ Û± ØªØ§ Û² Ø®Ø·.",
-            "medium": "Ø·ÙˆÙ„ Ú¯Ø²Ø§Ø±Ø´: Ø­Ø¯ÙˆØ¯ Û´ ØªØ§ Ûµ Ø®Ø·.",
-            "high": "Ø·ÙˆÙ„ Ú¯Ø²Ø§Ø±Ø´: Ø­Ø¯ÙˆØ¯ Û¸ ØªØ§ Û¹ Ø®Ø·.",
+            "low": "طول گزارش: حدود ۱ تا ۲ خط.",
+            "medium": "طول گزارش: حدود ۴ تا ۵ خط.",
+            "high": "طول گزارش: حدود ۸ تا ۹ خط.",
         }
     else:
         mapping = {
-            "low": "Report length: about 1â€“2 lines.",
-            "medium": "Report length: about 4â€“5 lines.",
-            "high": "Report length: about 8â€“9 lines.",
+            "low": "Report length: about 1–2 lines.",
+            "medium": "Report length: about 4–5 lines.",
+            "high": "Report length: about 8–9 lines.",
         }
     return mapping[key]
 
@@ -428,7 +422,7 @@ def _package_result(ctx: dict[str, Any]) -> dict[str, Any]:
         text_report = (
             f"Query returned {count} rows."
             if language != "fa"
-            else f"Ù¾Ø±Ø³â€ŒÙˆØ¬Ùˆ {count} Ø±Ø¯ÛŒÙ Ø¨Ø±Ú¯Ø±Ø¯Ø§Ù†Ø¯."
+            else f"پرس‌وجو {count} ردیف برگرداند."
         )
     echarts_option = None
     echarts_options: list[dict[str, Any]] = []
@@ -482,7 +476,7 @@ def _report_contract(ctx: dict[str, Any]) -> str:
     language = _result_language(ctx)
     report_level = _normalize_report_type(ctx.get("report_type"))
     lang_line = (
-        "Write text_report (and message) in Persian (ÙØ§Ø±Ø³ÛŒ). Keep SQL identifiers unchanged."
+        "Write text_report (and message) in Persian (فارسی). Keep SQL identifiers unchanged."
         if language == "fa"
         else "Write text_report (and message) in English. Keep SQL identifiers unchanged."
     )
@@ -635,15 +629,15 @@ def pipeline_events(
         intent_msg = _ui_text(
             language,
             f"Resolved user intent from DB table {db_intent.get('source_table')}: {str(ctx.get('prompt') or '')[:100]}",
-            f"Ù†ÛŒØª Ú©Ø§Ø±Ø¨Ø± Ø§Ø² Ø¬Ø¯ÙˆÙ„ {db_intent.get('source_table')} Ø¨Ø§Ø²ÛŒØ§Ø¨ÛŒ Ø´Ø¯: {str(ctx.get('prompt') or '')[:100]}",
+            f"نیت کاربر از جدول {db_intent.get('source_table')} بازیابی شد: {str(ctx.get('prompt') or '')[:100]}",
         )
     else:
         checked = ", ".join(db_intent.get("checked_tables") or []) or "catalog"
         detail = db_intent.get("error") or f"checked {checked}"
         intent_msg = _ui_text(
             language,
-            f"DB intent lookup ({checked}): {detail[:120]} â€” using raw prompt",
-            f"Ø¬Ø³Øªâ€ŒÙˆØ¬ÙˆÛŒ Ù†ÛŒØª Ø¯Ø± DB ({checked}): {detail[:120]} â€” Ø§Ø³ØªÙØ§Ø¯Ù‡ Ø§Ø² Ù¾Ø±Ø§Ù…Ù¾Øª Ø®Ø§Ù…",
+            f"DB intent lookup ({checked}): {detail[:120]} — using raw prompt",
+            f"جست‌وجوی نیت در DB ({checked}): {detail[:120]} — استفاده از پرامپت خام",
         )
     yield _sse(
         _step_event(
@@ -662,7 +656,7 @@ def pipeline_events(
     user_message = _ui_text(
         language,
         f"Received prompt ({mode}/{language}) via {provider_name}: {effective_prompt[:120]}",
-        f"Ø¯Ø±Ø®ÙˆØ§Ø³Øª Ø¯Ø±ÛŒØ§ÙØª Ø´Ø¯ ({mode}/{language}) Ø§Ø² {provider_name}: {effective_prompt[:120]}",
+        f"درخواست دریافت شد ({mode}/{language}) از {provider_name}: {effective_prompt[:120]}",
     )
     yield _sse(
         _step_event(
@@ -683,7 +677,7 @@ def pipeline_events(
             agent_id="orchester",
             node_id="orchester",
             status="running",
-            message=_ui_text(language, f"Running {display}â€¦", f"Ø¯Ø± Ø­Ø§Ù„ Ø§Ø¬Ø±Ø§ÛŒ {display}â€¦"),
+            message=_ui_text(language, f"Running {display}…", f"در حال اجرای {display}…"),
         )
     )
 
@@ -781,7 +775,7 @@ def resume_pipeline_events(run_id: str, answers: dict[str, Any]) -> Iterator[str
             {
                 "event": "error",
                 "error": (
-                    "This question expired â€” the run was dropped by the server. "
+                    "This question expired — the run was dropped by the server. "
                     "Start the analysis again."
                 ),
                 "kind": "pause_expired",
@@ -861,7 +855,7 @@ def run_pipeline_sync(
         # Only the streaming endpoint can answer a paused run, so a synchronous caller is told to
         # use it rather than being handed a question it has no way to reply to.
         raise ValueError(
-            f"This run is waiting for an answer: {question} â€” continue it from /api/runs/stream "
+            f"This run is waiting for an answer: {question} — continue it from /api/runs/stream "
             "and /api/runs/<run_id>/answer."
         )
     if not result:

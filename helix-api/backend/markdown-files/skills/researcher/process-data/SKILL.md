@@ -21,5 +21,5 @@ description: Check the rows sql-expert fetched against the goals, write what_was
 3. Reach the database only through `ask_sql_expert`. Never another connection or path.
 4. Ask the operator only for a real ambiguity in the data ask, never for access or permission.
 5. `report_type` sets prose length only: low about 1 to 2 lines, medium about 4 to 5, high about 8 to 9.
-6. When the run is Persian (`language=fa` or a Persian prompt), write `text_report` in Persian. Keep SQL and catalog identifiers untranslated.
+6. When the run is Persian (`language=fa`), write `text_report` in Persian. Keep SQL and catalog identifiers untranslated. `language` is the app locale, never inferred from the prompt.
 7. Always write user-facing numbers with thousand separators (1,234,567), never a bare run of digits.

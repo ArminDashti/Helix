@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { X, ChevronDown, ChevronUp, Clock, Layers, Database, AlertTriangle, CheckCircle2, Loader2, Copy, Send } from "lucide-react";
+import { X, ChevronDown, ChevronUp, Clock, Layers, Database, AlertTriangle, CheckCircle2, Loader2, Copy, Send, Bot, ArrowDownToLine, ArrowUpFromLine, Square } from "lucide-react";
 import IconButton from "./IconButton.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
+import { formatNumber } from "../i18n/format.js";
 import { translateKnownMessage } from "../i18n/apiErrors.js";
 
 function agentLabel(agentId, nameById, t) {
@@ -35,13 +36,15 @@ export default function RunProgressModal({
   error,
   onDismiss,
   nameById = {},
+  tokenUsage = null,
   meta = {},
   startedAt = null,
   question = null,
   onSubmitAnswers,
+  onStop,
 }) {
   const listRef = useRef(null);
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [expanded, setExpanded] = useState({});
   const [showRaw, setShowRaw] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -87,7 +90,7 @@ export default function RunProgressModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="run-progress-title">
-      <div className="flex max-h-[min(94dvh,48rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-line bg-paper shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)]">
+      <div className="flex max-h-[min(94dvh,48rem)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-line bg-paper shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)]">
         <header className="shrink-0 border-b border-line/80 px-4 py-3 space-y-2">
           <div className="flex items-start justify-between gap-3">
             <h2 id="run-progress-title" className="font-display text-lg text-ink">{t("runProgress.title")}</h2>
@@ -99,14 +102,39 @@ export default function RunProgressModal({
 
           {prompt ? <p className="line-clamp-3 rounded-lg bg-fog/40 px-3 py-2 text-sm text-ink/90 border border-line/60">{prompt}</p> : null}
 
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-5">
+            <span className="inline-flex min-w-0 items-center gap-1.5 rounded-lg border border-line bg-fog px-2.5 py-1.5 text-xs" title={t("runProgress.agentLabel")}>
+              <Bot className="size-3.5 shrink-0 text-moss" />
+              <span className="truncate font-medium text-ink">{runningStep ? agentLabel(runningStep.agent_id, nameById, t) : running ? t("runProgress.fallbackAgent") : t("runProgress.agentLabel")}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-fog px-2.5 py-1.5 text-xs" title={t("runProgress.tokensIn")}>
+              <ArrowDownToLine className="size-3.5 shrink-0 text-muted" />
+              <span className="text-muted">{t("runProgress.tokensIn")}:</span>
+              <span className="font-medium text-ink">{formatNumber(tokenUsage?.prompt_tokens ?? 0, locale) || "0"}{tokenUsage?.estimated ? " ≈" : ""}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-fog px-2.5 py-1.5 text-xs" title={t("runProgress.tokensOut")}>
+              <ArrowUpFromLine className="size-3.5 shrink-0 text-muted" />
+              <span className="text-muted">{t("runProgress.tokensOut")}:</span>
+              <span className="font-medium text-ink">{formatNumber(tokenUsage?.completion_tokens ?? 0, locale) || "0"}{tokenUsage?.estimated ? " ≈" : ""}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-fog px-2.5 py-1.5 text-xs" title={t("runProgress.stepsLabel")}>
+              <Layers className="size-3.5 shrink-0 text-muted" />
+              <span className="text-muted">{t("runProgress.stepsLabel")}:</span>
+              <span className="font-medium text-ink">{list.length}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-fog px-2.5 py-1.5 text-xs" title="Elapsed">
+              <Clock className="size-3.5 shrink-0 text-muted" />
+              <span className="text-muted">Time:</span>
+              <span className="font-medium text-ink">{elapsedTotal != null ? formatElapsed(elapsedTotal) : "—"}</span>
+            </span>
+          </div>
+
           <div className="flex flex-wrap gap-1.5 text-xs">
             {meta.mode ? <span className="rounded-full border border-line bg-fog px-2 py-1 font-medium text-ink">mode: {meta.mode}</span> : null}
             {meta.language ? <span className="rounded-full border border-line bg-fog px-2 py-1 font-medium text-ink">lang: {meta.language}</span> : null}
             {meta.report_type ? <span className="rounded-full border border-line bg-fog px-2 py-1 font-medium text-ink">report: {meta.report_type}</span> : null}
             {meta.chart_types?.length ? <span className="rounded-full border border-line bg-fog px-2 py-1 font-medium text-ink">charts: {meta.chart_types.join(", ")}</span> : meta.chart_type ? <span className="rounded-full border border-line bg-fog px-2 py-1 font-medium text-ink">chart: {meta.chart_type}</span> : null}
-            <span className="inline-flex items-center gap-1 rounded-full border border-line bg-paper px-2 py-1 text-muted"><Layers className="size-3" /> {list.length} steps</span>
             {failedCount ? <span className="rounded-full bg-red-100 border border-red-200 px-2 py-1 font-medium text-red-700">{failedCount} failed</span> : null}
-            <span className="inline-flex items-center gap-1 rounded-full border border-line bg-paper px-2 py-1 text-muted"><Clock className="size-3" /> {elapsedTotal != null ? formatElapsed(elapsedTotal) : "—"} total</span>
           </div>
 
           {running ? (
@@ -244,7 +272,19 @@ export default function RunProgressModal({
             <p className="text-xs text-muted">{t("runProgress.finished") || "Run finished — result will be saved."}</p>
           )}
           <div className="flex justify-end gap-2">
-            {running ? <span className="text-xs text-muted self-center">Close is disabled while running</span> : null}
+            {running ? (
+              <>
+                <span className="text-xs text-muted self-center">Close is disabled while running</span>
+                <IconButton
+                  type="button"
+                  icon={Square}
+                  onClick={onStop}
+                  className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+                >
+                  {t("runProgress.stop")}
+                </IconButton>
+              </>
+            ) : null}
             <IconButton type="button" icon={X} onClick={onDismiss} disabled={running} className="rounded-xl border border-line bg-fog px-4 py-2 text-sm font-medium text-ink hover:bg-fog/80 disabled:opacity-50">
               {running ? t("runProgress.running") || "Running…" : t("common.close")}
             </IconButton>

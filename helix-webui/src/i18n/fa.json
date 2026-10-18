@@ -202,7 +202,8 @@
     "cannotRun": "اجرا ممکن نیست",
     "llmUnreachable": "دسترسی به API ممکن نیست؛ مدل زبانی قابل استفاده نیست.",
     "apiKeyMissing": "کلید API تنظیم نشده است",
-    "runFailed": "اجرا ناموفق بود"
+    "runFailed": "اجرا ناموفق بود",
+    "runStopped": "تحلیل متوقف شد"
   },
   "runProgress": {
     "title": "در حال اجرای تحلیل",
@@ -220,7 +221,12 @@
     "questionTitle": "{{name}} به پاسخ شما نیاز دارد",
     "questionWaiting": "متوقف شد — منتظر پاسخ شماست.",
     "questionPlaceholder": "پاسخ شما…",
-    "questionSubmit": "ارسال پاسخ"
+    "questionSubmit": "ارسال پاسخ",
+    "agentLabel": "عامل",
+    "tokensIn": "توکن ورودی",
+    "tokensOut": "توکن خروجی",
+    "stepsLabel": "گام‌ها",
+    "stop": "توقف"
   },
   "results": {
     "title": "نتایج",

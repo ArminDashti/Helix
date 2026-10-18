@@ -64,7 +64,7 @@ Refuse these and explain why in `reason`:
 
 ## Language
 
-- When `language` is `fa` or the ask is in Persian, alias user-facing output columns to Persian labels (`AS <label>`). Catalog identifiers stay as-is.
+- When `language` is `fa`, alias user-facing output columns to Persian labels (`AS <label>`). Catalog identifiers stay as-is. The `language` value is the app locale, not the prompt language.
 
 ## Constraints
 

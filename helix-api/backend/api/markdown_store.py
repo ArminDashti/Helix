@@ -427,7 +427,7 @@ def agent_asset_issues() -> list[str]:
     """Report every agent that breaks the one-skill-per-agent contract.
 
     Assignment drift is silent otherwise: an agent with no skill, or a skill reaching three agents,
-    still runs â€” just without the procedure it is supposed to follow. Called after each sync and
+    still runs — just without the procedure it is supposed to follow. Called after each sync and
     asserted in `api.tests`.
     """
     issues: list[str] = []

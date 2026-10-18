@@ -82,6 +82,7 @@ export default function AnalysisPage() {
   const [activePrompt, setActivePrompt] = useState("");
   const [runMessages, setRunMessages] = useState([]);
   const [runMeta, setRunMeta] = useState({});
+  const [runTokenUsage, setRunTokenUsage] = useState(null);
   const [runStartedAt, setRunStartedAt] = useState(null);
   const [nameById, setNameById] = useState({});
   const [pendingQuestion, setPendingQuestion] = useState(null);
@@ -177,6 +178,7 @@ export default function AnalysisPage() {
     setLlmError(null);
     setRunError(null);
     setRunMessages([]);
+    setRunTokenUsage(null);
     setRunMeta({
       mode,
       language: outputLanguage,
@@ -284,6 +286,7 @@ export default function AnalysisPage() {
           handoff: event.handoff,
         },
       ]);
+      if (event.token_usage) setRunTokenUsage(event.token_usage);
     } else if (event?.event === "error" && event.error) {
       const body = translateKnownMessage(t, String(event.error));
       if (event.kind === "rejection") {
@@ -312,6 +315,13 @@ export default function AnalysisPage() {
     const resolve = answerResolveRef.current;
     answerResolveRef.current = null;
     resolve?.(answers);
+  }
+
+  /** Stop the in-flight run: abort the SSE fetch and surface a neutral stopped note. */
+  function stopRun() {
+    abortRef.current?.abort();
+    setRunning(false);
+    setRunError(t("analysis.runStopped"));
   }
 
   function dismissModal() {
@@ -509,7 +519,9 @@ export default function AnalysisPage() {
         running={running}
         error={runError}
         onDismiss={dismissModal}
+        onStop={stopRun}
         nameById={nameById}
+        tokenUsage={runTokenUsage}
         meta={runMeta}
         startedAt={runStartedAt}
         question={pendingQuestion}

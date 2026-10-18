@@ -202,7 +202,8 @@
     "cannotRun": "Cannot run",
     "llmUnreachable": "Cannot reach the API; LLM cannot be used.",
     "apiKeyMissing": "API key is not set",
-    "runFailed": "Run failed"
+    "runFailed": "Run failed",
+    "runStopped": "Analysis stopped"
   },
   "runProgress": {
     "title": "Running analysis",
@@ -220,7 +221,12 @@
     "questionTitle": "{{name}} needs an answer",
     "questionWaiting": "Paused — waiting for your answer.",
     "questionPlaceholder": "Your answer…",
-    "questionSubmit": "Send answer"
+    "questionSubmit": "Send answer",
+    "agentLabel": "Agent",
+    "tokensIn": "Tokens in",
+    "tokensOut": "Tokens out",
+    "stepsLabel": "Steps",
+    "stop": "Stop"
   },
   "results": {
     "title": "Results",
