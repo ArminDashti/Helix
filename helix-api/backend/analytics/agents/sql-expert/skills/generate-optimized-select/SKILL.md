@@ -8,6 +8,14 @@ description: Turn a plain-English data ask from another agent into one safe, bou
 Input: `request` (plain English from the calling agent), optional `period`, `grain`, `limit`, `language`.
 Output: `{ sql, row_count, columns, rows_preview, notes }` or `{ error, reason }`.
 
+## Allowed schemas
+
+Query ONLY these schemas: `Sales`, `Warehouse`, `dbo`, `global`, `Purchase`, `HumanResource`.
+
+- Always schema-qualify every table and view, e.g. `Sales.Orders`, `dbo.Customers`. Never use an unqualified object name.
+- Never reference any other schema, in FROM, JOIN, subqueries, CTEs, or EXISTS clauses. This holds even if the live catalog shows the object.
+- If the answer needs a table outside these schemas, do not query it. Return `{ error, reason }` saying which table/schema is needed and that it is outside the allowed schemas.
+
 ## Procedure
 
 1. Parse the ask. Name the grain (what one output row means), the measure (what is counted or summed), the period, and the filter. If any of these is missing and cannot be inferred from the catalog, return `{ error, reason }` naming the missing piece. Do not guess wide. Orchester decides the next step.
@@ -21,6 +29,7 @@ Output: `{ sql, row_count, columns, rows_preview, notes }` or `{ error, reason }
 ## Pre-flight checklist (must pass before execute)
 
 - Single statement, `SELECT` or `WITH ... SELECT` only. No DML, DDL, `EXEC`, `MERGE`, `;`-separated batches, or temp-table writes.
+- Every object is schema-qualified and belongs to an allowed schema (Sales, Warehouse, dbo, global, Purchase, HumanResource).
 - Row limit present: `TOP (n)` (SQL Server), `FETCH FIRST n ROWS ONLY`, or `LIMIT n` (SQLite/Postgres). `n` is at most the server row cap. Aggregations that return few groups still get a limit.
 - No `SELECT *`. List only the columns the answer needs.
 - At least one selective predicate on an indexed or key column, or an explicit date range. A query with no selective predicate on a large table is rejected. Narrow it first.
