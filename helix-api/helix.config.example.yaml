@@ -1,8 +1,8 @@
 # Copy to helix.config.yaml and fill in secrets.
 # Do not commit helix.config.yaml.
 #
-# Paste the API key in Settings > LLM. One key is enough for every connector.
-# Keys are stored as openrouter.token (never returned by the API).
+# Paste the API key in Settings > Provider. Each connector keeps its own key.
+# Keys are stored as openrouter.tokens.<connector_id> (never returned by the API).
 # provider: opencode_go | openrouter | openai_compatible
 # - opencode_go: OpenCode Go subscription; the app supplies the endpoint
 #   (https://opencode.ai/zen/go/v1) and the plan's model catalog — key only.
