@@ -12,6 +12,7 @@ import json
 from typing import Any
 
 from . import markdown_store as store
+from . import sql_memory
 
 # ponytail: one LLM tool turn per query attempt; a second turn is only for the error-driven rewrite.
 MAX_TURNS = 3
@@ -65,13 +66,23 @@ def run_sql_request(request: str, ctx: dict[str, Any]) -> dict[str, Any]:
     if not ask:
         return _fail(ctx, "sql-expert needs a plain-English request")
 
-    system = store.assemble_agent_prompt("sql-expert") + _TOOL_LINE
+    examples = sql_memory.similar_examples(ask)
+    example_block = ""
+    if examples:
+        shown = "\n".join(f"- Ask: {e['request']}\n  SQL: {e['sql']}" for e in examples)
+        example_block = (
+            "\n\n## Similar past requests (reuse what worked)\n"
+            f"{shown}\n"
+        )
+
+    system = store.assemble_agent_prompt("sql-expert") + _TOOL_LINE + example_block
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": system},
         {"role": "user", "content": f"Data request (plain English):\n{ask}"},
     ]
     tools = [EXECUTE_SELECT_TOOL]
     result: dict[str, Any] | None = None
+    sql_saved = False
 
     for _turn in range(MAX_TURNS):
         try:
@@ -84,6 +95,9 @@ def run_sql_request(request: str, ctx: dict[str, Any]) -> dict[str, Any]:
             parsed = _parse_json_object(str(assistant.get("content") or ""))
             if result is not None and parsed.get("ok") is not False:
                 result["notes"] = str(parsed.get("notes") or "")
+                if not sql_saved and result.get("sql"):
+                    sql_memory.save_example(ask, str(result["sql"]))
+                    sql_saved = True
                 return result
             return _fail(
                 ctx,

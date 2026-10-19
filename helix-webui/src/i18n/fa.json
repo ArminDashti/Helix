@@ -535,6 +535,10 @@
     "connectionString": "رشته اتصال",
     "connectionHint": "ویرایش و ذخیره کنید تا فیلدهای میزبان، درگاه، پایگاه داده، کاربر و گذرواژه به‌روز شوند.",
     "saveDatabase": "ذخیره پایگاه داده",
+    "blockedTables": "اسکیماها و جدول‌های محدودشده",
+    "blockedTablesHint": "هر مورد در یک خط. ایجنت‌ها نمی‌توانند از این‌ها داده بگیرند. از Table، Schema.Table یا Schema.* برای کل اسکیما استفاده کنید.",
+    "blockedTablesSave": "ذخیره محدودیت‌ها",
+    "blockedTablesSaved": "محدودیت‌ها ذخیره شد.",
     "dbSaved": "تنظیمات پایگاه داده در helix.config.yaml ذخیره شد."
   },
   "models": {

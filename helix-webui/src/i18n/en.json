@@ -535,6 +535,10 @@
     "connectionString": "Connection string",
     "connectionHint": "Edit and save to update host, port, database, user, and password fields.",
     "saveDatabase": "Save Database",
+    "blockedTables": "Restricted schemas & tables",
+    "blockedTablesHint": "One entry per line. Agents cannot fetch from these. Use Table, Schema.Table, or Schema.* for a whole schema.",
+    "blockedTablesSave": "Save Restrictions",
+    "blockedTablesSaved": "Restrictions saved.",
     "dbSaved": "Database settings saved to helix.config.yaml."
   },
   "models": {

@@ -203,6 +203,24 @@ def validate_select(
         "A",
     )
     # #endregion
+    blocked = {
+        str(entry).strip().lower()
+        for entry in (settings.get("blocked_tables") or [])
+        if str(entry).strip()
+    }
+    if blocked:
+        # ponytail: FROM/JOIN regex also matches CTE names — a blocked table
+        # whose name equals a CTE alias false-positives; upgrade to AST parsing
+        # (sqlglot) if that matters.
+        for schema, table in from_tokens:
+            target = f"{schema}.{table}" if schema else table
+            if (
+                target.lower() in blocked
+                or table.lower() in blocked
+                or any(entry.endswith("." + table.lower()) for entry in blocked)
+                or (schema and f"{schema.lower()}.*" in blocked)
+            ):
+                raise ValueError(f"Access to {target} is restricted by the administrator")
     if enforce_allowlist:
         for schema, table in from_tokens:
             if table.lower() not in allowed:

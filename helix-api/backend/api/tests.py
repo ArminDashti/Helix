@@ -1402,6 +1402,37 @@ class SqlExecuteTests(SimpleTestCase):
         mock_cur.fetchall.assert_not_called()
         self.assertEqual(mock_cur.execute.call_count, 2)
 
+    def test_validate_select_blocked_tables(self):
+        from .sql_execute import validate_select
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "helix.config.yaml"
+            with override_settings(HELIX_CONFIG_PATH=str(config_path)):
+                save_config(
+                    {
+                        "database": {
+                            "engine": "sqlserver",
+                            "host": "db.internal",
+                            "port": 1433,
+                            "name": "Sales",
+                        },
+                        "sql": {
+                            "blocked_tables": ["Sales.Moshtary", "HumanResource.*"],
+                        },
+                    }
+                )
+                # Unblocked table still passes.
+                validate_select("SELECT a FROM Sales.Other")
+                # Exact schema.table match is blocked.
+                with self.assertRaises(ValueError):
+                    validate_select("SELECT a FROM Sales.Moshtary")
+                # Schema wildcard blocks any table in that schema.
+                with self.assertRaises(ValueError):
+                    validate_select("SELECT a FROM HumanResource.Employees")
+                # Bare table name blocks it in any schema.
+                with self.assertRaises(ValueError):
+                    validate_select("SELECT a FROM Moshtary")
+
     def test_execute_select_retries_pyodbc_exception_set(self):
         from .sql_execute import execute_select
 

@@ -34,6 +34,7 @@ from .config_loader import (
     get_openrouter_settings,
     get_openrouter_token,
     get_provider,
+    get_sql_settings,
     known_agent_ids,
     set_agent_disabled,
     update_agent_display_name,
@@ -42,6 +43,7 @@ from .config_loader import (
     update_database_settings,
     update_openrouter_settings,
     update_provider,
+    update_sql_settings,
 )
 from .demo import (
     VALID_CHART_TYPES,
@@ -474,6 +476,26 @@ def admin_openrouter(request: HttpRequest) -> JsonResponse:
     except ValueError as exc:
         return _error(str(exc))
     return JsonResponse({"openrouter": openrouter})
+
+
+@csrf_exempt
+@require_http_methods(["GET", "PUT"])
+def admin_sql_restrictions(request: HttpRequest) -> JsonResponse:
+    """Blocked schemas/tables that agents (and the SQL explorer) may not fetch."""
+    if request.method == "GET":
+        return JsonResponse(
+            {"blocked_tables": get_sql_settings().get("blocked_tables") or []}
+        )
+    try:
+        body = _json_body(request)
+    except ValueError as exc:
+        return _error(str(exc))
+    payload = body.get("sql") if isinstance(body.get("sql"), dict) else body
+    try:
+        result = update_sql_settings(payload)
+    except ValueError as exc:
+        return _error(str(exc))
+    return JsonResponse({"blocked_tables": result.get("blocked_tables") or []})
 
 
 @csrf_exempt

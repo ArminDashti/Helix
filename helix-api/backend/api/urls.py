@@ -34,6 +34,7 @@ urlpatterns = [
     path("admin/branding/", views.admin_branding, name="admin-branding"),
     path("admin/provider/", views.admin_provider, name="admin-provider"),
     path("admin/openrouter/", views.admin_openrouter, name="admin-openrouter"),
+    path("admin/sql-restrictions/", views.admin_sql_restrictions, name="admin-sql-restrictions"),
     path(
         "admin/openrouter/models/",
         views.admin_openrouter_models,

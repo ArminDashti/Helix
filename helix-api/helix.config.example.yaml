@@ -83,6 +83,7 @@ sql:
   max_retries: 3
   require_row_limit: false # set true to require TOP / FETCH / LIMIT (unless pure aggregate)
   enforce_allowlist: false # set true to reject FROM/JOIN objects not returned by list_tables
+  # blocked_tables: ["Sales.Customers", "HumanResource.*"] # schemas/tables agents may not fetch
   forbid_select_star: true
   max_rows: 10000 # used only when require_row_limit is true
 

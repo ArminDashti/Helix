@@ -236,6 +236,7 @@ DEFAULT_SQL = {
     "enforce_allowlist": False,
     "forbid_select_star": True,
     "max_rows": 10000,
+    "blocked_tables": [],
 }
 
 
@@ -1451,7 +1452,36 @@ def get_sql_settings() -> dict[str, Any]:
     merged["require_row_limit"] = bool(merged.get("require_row_limit", False))
     merged["enforce_allowlist"] = bool(merged.get("enforce_allowlist", False))
     merged["forbid_select_star"] = bool(merged.get("forbid_select_star", True))
+    raw_blocked = merged.get("blocked_tables")
+    blocked: list[str] = []
+    if isinstance(raw_blocked, list):
+        for entry in raw_blocked:
+            text = str(entry or "").strip()
+            if text and text.lower() not in {b.lower() for b in blocked}:
+                blocked.append(text)
+    merged["blocked_tables"] = blocked
     return merged
+
+
+def update_sql_settings(payload: dict[str, Any]) -> dict[str, Any]:
+    """Persist the sql section fields the admin UI edits (currently blocked_tables)."""
+    data = load_config()
+    raw = data.get("sql") if isinstance(data.get("sql"), dict) else {}
+    if "blocked_tables" in payload:
+        entries = payload.get("blocked_tables")
+        if entries is None:
+            entries = []
+        if not isinstance(entries, list):
+            raise ValueError("blocked_tables must be a list of schema/table names")
+        cleaned: list[str] = []
+        for entry in entries:
+            text = str(entry or "").strip()
+            if text and text.lower() not in {c.lower() for c in cleaned}:
+                cleaned.append(text)
+        raw["blocked_tables"] = cleaned
+    data["sql"] = raw
+    save_config(data)
+    return get_sql_settings()
 
 
 def get_active_provider_settings() -> dict[str, Any]:

@@ -32,6 +32,8 @@ import {
   fetchOpenRouterModels,
   sendFeedback,
   fetchOpenRouterSettings,
+  fetchSqlRestrictions,
+  saveSqlRestrictions,
   fetchProviderSettings,
   fetchSampleTiers,
   ensureSampleTier,
@@ -565,6 +567,8 @@ export default function SettingsPage() {
   const [agentNameById, setAgentNameById] = useState({});
   const [sampleTiers, setSampleTiers] = useState([]);
   const [tierBusy, setTierBusy] = useState(null);
+  const [blockedTables, setBlockedTables] = useState("");
+  const [blockedBusy, setBlockedBusy] = useState(false);
   const { checkConnection } = useApiStatus();
 
   const activeTokenConfigured = Boolean(orForm.token_configured);
@@ -695,6 +699,8 @@ export default function SettingsPage() {
           const dbData = await fetchDatabaseSettings();
           setDbForm({ ...EMPTY_DB, ...dbData.database });
           setConnectionString(dbData.connection_string || "");
+          const res = await fetchSqlRestrictions();
+          setBlockedTables((res.blocked_tables || []).join("\n"));
           anyOk = true;
         } catch (err) {
           failures.push({
@@ -936,6 +942,26 @@ export default function SettingsPage() {
       checkConnection({ silent: true });
     } catch (err) {
       setError(failMessage(err, t, "common.saveFailed"));
+    }
+  }
+
+  async function handleSaveBlockedTables(event) {
+    event.preventDefault();
+    setError(null);
+    setStatus(null);
+    setBlockedBusy(true);
+    try {
+      const entries = (blockedTables || "")
+        .split(/\r?\n|,/)
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+      const data = await saveSqlRestrictions(entries);
+      setBlockedTables((data.blocked_tables || []).join("\n"));
+      setStatus(t("settings.blockedTablesSaved"));
+    } catch (err) {
+      setError(failMessage(err, t, "common.saveFailed"));
+    } finally {
+      setBlockedBusy(false);
     }
   }
 
@@ -1585,6 +1611,33 @@ export default function SettingsPage() {
               spellCheck={false}
             />
             <p className="mt-1 text-xs text-muted">{t("settings.connectionHint")}</p>
+          </div>
+
+          <div className="rounded-xl border border-line bg-fog/40 p-3">
+            <label htmlFor="blockedTables" className="block text-sm font-medium text-ink">
+              {t("settings.blockedTables")}
+            </label>
+            <textarea
+              id="blockedTables"
+              rows={3}
+              value={blockedTables}
+              onChange={(e) => setBlockedTables(e.target.value)}
+              className="mt-1 w-full resize-y rounded-xl border border-line bg-paper px-3 py-2 font-mono text-[12px] text-ink outline-none focus:border-moss focus:ring-2 focus:ring-moss/30"
+              spellCheck={false}
+              placeholder={"Sales.Customers\nHumanResource.*"}
+            />
+            <p className="mt-1 text-xs text-muted">{t("settings.blockedTablesHint")}</p>
+            <div className="mt-2">
+              <IconButton
+                type="button"
+                disabled={blockedBusy}
+                onClick={handleSaveBlockedTables}
+                icon={Save}
+                className="rounded-xl border border-line bg-paper px-4 py-2 text-sm font-semibold text-ink hover:bg-fog disabled:opacity-60"
+              >
+                {blockedBusy ? t("common.saving") : t("settings.blockedTablesSave")}
+              </IconButton>
+            </div>
           </div>
 
           <IconButton

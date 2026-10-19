@@ -324,6 +324,18 @@ export async function saveDatabaseSettings(database) {
   });
 }
 
+export async function fetchSqlRestrictions() {
+  return requestJson("/api/admin/sql-restrictions/");
+}
+
+export async function saveSqlRestrictions(blockedTables) {
+  return requestJson("/api/admin/sql-restrictions/", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ blocked_tables: blockedTables }),
+  });
+}
+
 export async function fetchSampleTiers() {
   const data = await requestJson("/api/sample-tiers/");
   return data.tiers || [];
