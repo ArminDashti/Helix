@@ -51,3 +51,9 @@ coverage/
 graphify-out/
 .gitnexus/
 /.cursor/skills/caveman-setup/SKILL.md
+.agents/
+.cursor/mcp.json
+.cursor/hooks/
+.cursor/hooks.json
+.cursor/agents/
+.cursor/tools/
