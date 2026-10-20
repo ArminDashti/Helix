@@ -423,8 +423,11 @@ def list_skills(scope: str | None = None) -> list[dict]:
     return items
 
 
+_MULTI_SKILL_AGENT_IDS = frozenset({"researcher"})
+
+
 def agent_asset_issues() -> list[str]:
-    """Report every agent that breaks the one-skill-per-agent contract.
+    """Report agents whose skill assignments drift from the roster contract.
 
     Assignment drift is silent otherwise: an agent with no skill, or a skill reaching three agents,
     still runs — just without the procedure it is supposed to follow. Called after each sync and
@@ -435,9 +438,10 @@ def agent_asset_issues() -> list[str]:
 
     for agent_id in SYNC_AGENT_IDS:
         owned_skills = [skill["id"] for skill in skills if agent_id in (skill.get("agents") or [])]
-        if len(owned_skills) != 1:
+        expected = 2 if agent_id in _MULTI_SKILL_AGENT_IDS else 1
+        if len(owned_skills) != expected:
             issues.append(
-                f"{agent_id}: expected 1 skill, found {len(owned_skills)} "
+                f"{agent_id}: expected {expected} skill(s), found {len(owned_skills)} "
                 f"({', '.join(owned_skills) or 'none'})"
             )
     for skill in skills:
@@ -763,7 +767,13 @@ def assemble_agent_prompt(agent_id: str, *, include_warehouse: bool | None = Non
             "over static docs when they differ."
         )
         parts.append("")
-        parts.append(format_live_catalog_for_prompt())
+        catalog_kwargs: dict[str, Any] = {}
+        if definition_id == "researcher":
+            from .sql_expert_tools import ALLOWED_SCHEMAS
+
+            catalog_kwargs["prioritize_schemas"] = tuple(sorted(ALLOWED_SCHEMAS))
+            catalog_kwargs["min_per_prioritized_schema"] = 8
+        parts.append(format_live_catalog_for_prompt(**catalog_kwargs))
         parts.append("")
     return "\n".join(parts).strip() + "\n"
 

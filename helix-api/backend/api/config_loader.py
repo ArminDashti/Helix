@@ -300,11 +300,11 @@ def _drop_stale_pipeline_graph(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-_DEFAULT_PIPELINE_AGENT_IDS = ("orchester", "sql-expert", "researcher")
+_DEFAULT_PIPELINE_AGENT_IDS = ("orchester", "researcher")
 
 
 def _ensure_single_orchester_pipeline(data: dict[str, Any]) -> dict[str, Any]:
-    """Reset saved graphs that are not the four-agent LangGraph seed."""
+    """Reset saved graphs that are not the two-agent LangGraph seed."""
     expected = set(_DEFAULT_PIPELINE_AGENT_IDS)
     needs_reset = False
     graph = data.get("pipeline_graph")

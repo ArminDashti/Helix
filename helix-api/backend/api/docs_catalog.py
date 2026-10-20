@@ -323,6 +323,8 @@ def format_live_catalog_for_prompt(
     *,
     max_tables: int = 60,
     max_columns_per_table: int = 48,
+    prioritize_schemas: tuple[str, ...] = (),
+    min_per_prioritized_schema: int = 8,
 ) -> str:
     """Introspect the connected database for agent prompts (any engine)."""
     try:
@@ -347,10 +349,49 @@ def format_live_catalog_for_prompt(
         else:
             other.append({**item, "full_name": full_name})
 
-    selected = documented[:max_tables]
-    remaining = max(0, max_tables - len(selected))
-    if remaining:
-        selected.extend(other[:remaining])
+    selected: list[dict[str, Any]] = []
+    selected_keys: set[str] = set()
+
+    def _schema_of(entry: dict[str, Any]) -> str:
+        sch = str(entry.get("schema") or "").strip()
+        if sch:
+            return sch
+        full = str(entry.get("full_name") or "")
+        return full.split(".")[0] if "." in full else ""
+
+    if prioritize_schemas:
+        priority = {s for s in prioritize_schemas if s}
+        pool = documented + other
+        by_schema: dict[str, list[dict[str, Any]]] = {s: [] for s in priority}
+        for entry in pool:
+            sch = _schema_of(entry)
+            if sch in by_schema:
+                by_schema[sch].append(entry)
+        for sch in prioritize_schemas:
+            for entry in by_schema.get(sch, [])[:min_per_prioritized_schema]:
+                key = str(entry.get("full_name") or "").lower()
+                if key and key not in selected_keys:
+                    selected.append(entry)
+                    selected_keys.add(key)
+
+    for entry in documented:
+        key = str(entry.get("full_name") or "").lower()
+        if key and key not in selected_keys:
+            selected.append(entry)
+            selected_keys.add(key)
+        if len(selected) >= max_tables:
+            break
+
+    if len(selected) < max_tables:
+        for entry in other:
+            key = str(entry.get("full_name") or "").lower()
+            if key and key not in selected_keys:
+                selected.append(entry)
+                selected_keys.add(key)
+            if len(selected) >= max_tables:
+                break
+
+    selected = selected[:max_tables]
 
     lines: list[str] = []
     for item in selected:

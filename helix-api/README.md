@@ -34,8 +34,8 @@ Django app state uses **SQLite** (`HELIX_DJANGO_ENGINE=sqlite`, volume `helix-sq
 
 ## Agent pipeline
 
-Human → 1. Orchester (inspect, goals) → 2. sql-expert (one SELECT) → 3. Researcher (process rows) → 4. Orchester (validate, package) → Human
+Human → 1. Orchester (inspect, goals) → 2. Researcher (SELECT + report) → 3. Orchester (validate, package) → Human
 
-Agents use assigned skills only. Orchester and researcher can ask the operator; sql-expert cannot. Analysis runs fetch real warehouse rows through sql-expert (row-capped), and researcher returns the report from those rows.
+Agents use assigned skills only. Orchester and researcher can ask the operator. Analysis runs fetch real warehouse rows through researcher (row-capped SELECT tools), and the report is grounded in those rows.
 
 See `backend/analytics/agents/registry.md`.

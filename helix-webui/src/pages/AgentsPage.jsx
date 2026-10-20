@@ -86,7 +86,7 @@ export default function AgentsPage() {
     () =>
       agents
         .filter((agent) =>
-          ["orchester", "sql-expert", "researcher"].includes(agent.id),
+          ["orchester", "researcher"].includes(agent.id),
         )
         .map((agent) => ({ key: agent.id, item: agent })),
     [agents],
@@ -94,7 +94,7 @@ export default function AgentsPage() {
   const pipelineAgents = useMemo(
     () =>
       agents.filter((agent) =>
-        ["orchester", "sql-expert", "researcher"].includes(agent.id),
+        ["orchester", "researcher"].includes(agent.id),
       ),
     [agents],
   );

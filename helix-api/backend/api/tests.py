@@ -83,7 +83,7 @@ class ThreeAgentPipelineTests(SimpleTestCase):
         graph = compile_pipeline_flow(default_pipeline_flow())
         self.assertEqual(graph["entry"], "orchester")
         node_ids = [node["id"] for node in graph["nodes"]]
-        self.assertEqual(node_ids, ["orchester", "sql-expert", "researcher"])
+        self.assertEqual(node_ids, ["orchester", "researcher"])
 
     def test_prompt_hard_block_refuses_write_and_allows_grid_ask(self):
         from .pipeline_run import _prompt_hard_block
@@ -139,7 +139,7 @@ class ThreeAgentPipelineTests(SimpleTestCase):
                     "role": "assistant",
                     "content": '{"result":"pass","goals":"top products","gaps":[],"message":"ok"}',
                 }
-            if agent_id == "sql-expert":
+            if agent_id == "researcher":
                 if n == 1:
                     return {
                         "role": "assistant",
@@ -155,8 +155,6 @@ class ThreeAgentPipelineTests(SimpleTestCase):
                             }
                         ],
                     }
-                return {"role": "assistant", "content": '{"ok":true,"notes":"one row"}'}
-            if agent_id == "researcher":
                 return {
                     "role": "assistant",
                     "content": (
@@ -195,7 +193,7 @@ class ThreeAgentPipelineTests(SimpleTestCase):
         self.assertIn("ok", message.lower())
         self.assertIsNotNone(ctx.get("final_payload"))
         self.assertEqual(ctx["final_payload"]["text_report"], "One row returned.")
-        self.assertEqual(by_agent, {"orchester": 2, "sql-expert": 2, "researcher": 1})
+        self.assertEqual(by_agent, {"orchester": 2, "researcher": 2})
         # The knowledge document matching the prompt rides along with the researcher's system
         # prompt, and both the run totals and the payload carry what the run cost.
         researcher_system = str(prompts["researcher"][0][0]["content"])
@@ -232,7 +230,6 @@ class ThreeAgentPipelineTests(SimpleTestCase):
             "mode": "grid",
             "language": "fa",
             "actor": {"username": "armin", "is_admin": True},
-            "db_intent": {"found": False, "checked_tables": []},
         }
         user = _build_user_message(ctx)
         self.assertIn("TarikhFaktor >= '2026-06-22'", user)
@@ -276,14 +273,14 @@ class ThreeAgentPipelineTests(SimpleTestCase):
     def test_three_agents_registered_in_roster(self):
         from .agents import AGENT_IDS, SUB_AGENT_IDS
 
-        self.assertEqual(AGENT_IDS, ["orchester", "sql-expert", "researcher"])
+        self.assertEqual(AGENT_IDS, ["orchester", "researcher"])
         self.assertEqual(SUB_AGENT_IDS, [])
 
     def test_only_orchester_and_researcher_can_ask_the_operator(self):
         from .pipeline_langgraph import _RESUME_NODES, _researcher_tools
 
         names = {tool["function"]["name"] for tool in _researcher_tools()}
-        self.assertEqual(names, {"ask_sql_expert"})
+        self.assertEqual(names, {"describe_table", "sample_rows", "execute_select"})
         self.assertEqual(set(_RESUME_NODES), {"orchester", "researcher"})
 
     def test_retired_agents_are_not_pipeline_nodes(self):
@@ -338,7 +335,7 @@ class AgentAssetContractTests(SimpleTestCase):
     def test_agent_prompt_carries_skills_and_no_rules_section(self):
         from . import markdown_store as store
 
-        for agent_id in ("orchester", "sql-expert", "researcher"):
+        for agent_id in ("orchester", "researcher"):
             prompt = store.assemble_agent_prompt(agent_id, include_warehouse=False)
             self.assertIn("## Skills", prompt, agent_id)
             self.assertNotIn("## Rules", prompt, agent_id)
@@ -437,7 +434,7 @@ class AgentAssetContractTests(SimpleTestCase):
             with patch("api.docs_catalog.format_live_catalog_for_prompt", return_value="### Sales.Moshtary"):
                 prompts = {
                     agent_id: store.assemble_agent_prompt(agent_id)
-                    for agent_id in ("orchester", "sql-expert", "researcher")
+                    for agent_id in ("orchester", "researcher")
                 }
         skill_path = Path("generate-optimized-select/SKILL.md")
         for agent_id, prompt in prompts.items():
@@ -477,6 +474,78 @@ class DocsCatalogPromptTests(SimpleTestCase):
         self.assertIn("SalesLT.Product", text)
         self.assertIn("ProductID", text)
         self.assertIn("Name", text)
+
+    def test_format_live_catalog_prioritizes_schemas(self):
+        from . import docs_catalog
+
+        live = [
+            {"schema": "Sales", "name": f"T{i}", "full_name": f"Sales.T{i}"}
+            for i in range(40)
+        ] + [
+            {"schema": "Warehouse", "name": "Kala", "full_name": "Warehouse.Kala"},
+            {"schema": "Global", "name": "MarkazPakhsh", "full_name": "Global.MarkazPakhsh"},
+        ]
+        with patch.object(docs_catalog.db_sql, "list_tables", return_value=live):
+            with patch.object(docs_catalog.db_sql, "list_columns", return_value=[]):
+                with patch.object(docs_catalog, "_docs_markdown", return_value=""):
+                    text = docs_catalog.format_live_catalog_for_prompt(
+                        max_tables=10,
+                        prioritize_schemas=("Warehouse", "Global"),
+                        min_per_prioritized_schema=1,
+                    )
+        self.assertIn("Warehouse.Kala", text)
+        self.assertIn("Global.MarkazPakhsh", text)
+
+
+class SqlExpertToolsTests(SimpleTestCase):
+    def test_describe_table_rejects_disallowed_schema(self):
+        from .sql_expert_tools import describe_table
+
+        with self.assertRaises(ValueError) as ctx:
+            describe_table("Accounting.Ledger")
+        self.assertIn("not allowlisted", str(ctx.exception).lower())
+
+    def test_describe_table_returns_merged_docs(self):
+        from . import sql_expert_tools
+        from .sql_expert_tools import describe_table
+
+        sql_expert_tools._live_full_names.cache_clear()
+        with patch.object(
+            sql_expert_tools,
+            "validate_allowlisted_table",
+            return_value=("Warehouse", "Kala"),
+        ):
+            with patch.object(
+                sql_expert_tools.docs_catalog,
+                "get_table_docs",
+                return_value={
+                    "full_name": "Warehouse.Kala",
+                    "kind": "table",
+                    "overview": "Product master",
+                    "columns": [{"name": "ccKala", "data_type": "int", "nullable": False, "description": "PK"}],
+                },
+            ):
+                payload = describe_table("Warehouse.Kala")
+        self.assertEqual(payload["table"], "Warehouse.Kala")
+        self.assertEqual(payload["columns"][0]["name"], "ccKala")
+
+    def test_sample_rows_caps_at_five(self):
+        from . import sql_expert_tools
+
+        rows = [{"ccKala": i} for i in range(10)]
+        with patch.object(
+            sql_expert_tools,
+            "validate_allowlisted_table",
+            return_value=("Warehouse", "Kala"),
+        ):
+            with patch.object(
+                sql_expert_tools.db_sql,
+                "select_rows",
+                return_value={"table": "Warehouse.Kala", "columns": ["ccKala"], "rows": rows},
+            ):
+                payload = sql_expert_tools.sample_rows("Warehouse.Kala", limit=5)
+        self.assertEqual(payload["row_count"], 5)
+        self.assertEqual(len(payload["rows"]), 5)
 
 
 class LlmSettingsTests(SimpleTestCase):
@@ -889,11 +958,6 @@ class LlmSettingsTests(SimpleTestCase):
 
                 with patch("api.llm_client.urllib.request.urlopen", _fake_urlopen):
                     complete_chat_messages(
-                        "sql-expert",
-                        [{"role": "user", "content": "ping"}],
-                        session_id="run-1",
-                    )
-                    complete_chat_messages(
                         "researcher",
                         [{"role": "user", "content": "ping"}],
                         session_id="run-1",
@@ -905,9 +969,8 @@ class LlmSettingsTests(SimpleTestCase):
                 # One run is one conversation: every agent call in it shares the id, and Go can
                 # route and cache the run together.
                 self.assertEqual(sent[0]["x-opencode-session"], "run-1")
-                self.assertEqual(sent[1]["x-opencode-session"], "run-1")
                 # A call with no conversation of its own still sends a routable session.
-                self.assertTrue(sent[2]["x-opencode-session"])
+                self.assertTrue(sent[1]["x-opencode-session"])
 
     def test_opencode_go_models_request_carries_a_session_header(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -945,7 +1008,7 @@ class LlmSettingsTests(SimpleTestCase):
         """The Settings form PUTs back what it was given, so no known agent may be missing."""
         from .config_loader import get_agent_model
 
-        agents = ("orchester", "sql-expert", "researcher")
+        agents = ("orchester", "researcher")
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "helix.config.yaml"
             with override_settings(HELIX_CONFIG_PATH=str(config_path)):
@@ -985,7 +1048,7 @@ class LlmSettingsTests(SimpleTestCase):
                 save_config({"provider": "opencode_go", "openrouter": {}})
                 settings = get_openrouter_settings()
                 self.assertEqual(
-                    settings["agents"]["sql-expert"]["model"],
+                    settings["agents"]["researcher"]["model"],
                     "deepseek-v4-flash",
                 )
 
@@ -1162,8 +1225,7 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
                     },
                     self.PASS,
                 ],
-                "sql-expert": [self.SQL_CALL, self.SQL_OK],
-                "researcher": [self.RESEARCHER_DONE],
+                "researcher": [self.SQL_CALL, self.RESEARCHER_DONE],
             },
             seen,
         )
@@ -1181,7 +1243,7 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
         self.assertIn("period", questions[0]["questions"][0]["text"])
         # Parked before any database work: no result, no SQL, and the run waits for an answer.
         self.assertNotIn("result", [event.get("event") for event in events])
-        self.assertNotIn("sql-expert", seen)
+        self.assertNotIn("researcher", seen)
         self.assertIsNotNone(run_store.peek_paused(ctx["run_id"]))
 
         seen.clear()
@@ -1196,10 +1258,10 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
             [{"question": "Which period should the report cover?", "answer": "last quarter"}],
         )
         # The answer reaches the agent that runs after the pause.
-        self.assertIn("last quarter", self._user_prompt(seen["sql-expert"][0]))
+        self.assertIn("last quarter", self._user_prompt(seen["researcher"][0]))
         self.assertIsNone(run_store.peek_paused(ctx["run_id"]))
 
-    def test_researcher_gets_rows_from_sql_expert(self):
+    def test_researcher_fetches_rows_with_execute_select(self):
         from . import markdown_store as store
 
         ctx = self._ctx()
@@ -1207,8 +1269,7 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
         fake_chat = self._chat(
             {
                 "orchester": [self.PASS, self.PASS],
-                "sql-expert": [self.SQL_CALL, self.SQL_OK],
-                "researcher": [self.RESEARCHER_DONE],
+                "researcher": [self.SQL_CALL, self.RESEARCHER_DONE],
             },
             seen,
         )
@@ -1219,12 +1280,11 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
                     events = self._drain(ctx)
 
         self.assertEqual(ctx["sql_fetch"]["rows"], self.SELECT["rows"])
-        # The researcher works from the rows sql-expert fetched, not from its own SQL.
-        self.assertIn('"n": 1', self._user_prompt(seen["researcher"][0]))
+        self.assertEqual(len(seen["researcher"]), 2)
         self.assertEqual(ctx["_orchester_outcome"][0], "done")
         self.assertNotIn("question", [event.get("event") for event in events])
 
-    def test_sql_expert_failure_reaches_orchester_which_asks_the_operator(self):
+    def test_researcher_failure_reaches_orchester_which_asks_the_operator(self):
         from . import markdown_store as store
 
         ctx = self._ctx()
@@ -1236,12 +1296,14 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
                     {"role": "assistant", "content": '{"action":"ask","question":"Which period?"}'},
                     self.PASS,
                 ],
-                "sql-expert": [
-                    {"role": "assistant", "content": '{"ok":false,"reason":"period missing"}'},
+                "researcher": [
+                    {
+                        "role": "assistant",
+                        "content": '{"result":"fail","message":"period missing"}',
+                    },
                     self.SQL_CALL,
-                    self.SQL_OK,
+                    self.RESEARCHER_DONE,
                 ],
-                "researcher": [self.RESEARCHER_DONE],
             },
             seen,
         )
@@ -1263,8 +1325,7 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
                     resumed = self._resume(ctx["run_id"], {"q1": "last quarter"})
 
         self.assertEqual(resumed[-1]["event"], "result")
-        # Orchester sent the run back to sql-expert, which carried the operator's answer.
-        self.assertIn("last quarter", self._user_prompt(seen["sql-expert"][0]))
+        self.assertIn("last quarter", self._user_prompt(seen["researcher"][-1]))
 
     def test_researcher_question_pauses_and_resumes_into_researcher(self):
         from . import markdown_store as store
@@ -1274,8 +1335,8 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
         fake_chat = self._chat(
             {
                 "orchester": [self.PASS, self.PASS],
-                "sql-expert": [self.SQL_CALL, self.SQL_OK],
                 "researcher": [
+                    self.SQL_CALL,
                     {
                         "role": "assistant",
                         "content": (
@@ -1306,8 +1367,6 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
                     resumed = self._resume(ctx["run_id"], {"q1": "TotalCost"})
 
         self.assertEqual(resumed[-1]["event"], "result")
-        # The run resumed at researcher, and its prompt carries the operator's answer.
-        self.assertNotIn("sql-expert", seen)
         self.assertIn("TotalCost", self._user_prompt(seen["researcher"][0]))
 
     def test_answering_an_unknown_run_reports_expired(self):
@@ -2025,3 +2084,17 @@ class DbExplorerObjectKindTests(SimpleTestCase):
         self.assertEqual(response.status_code, 400)
         data = json.loads(response.content)
         self.assertIn("kind must be one of", data["error"])
+
+
+class OrgUserAuthTests(SimpleTestCase):
+    def test_authenticate_default_armin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "helix.config.yaml"
+            with override_settings(HELIX_CONFIG_PATH=str(config_path)):
+                from . import org
+
+                org.ensure_org()
+                user = org.authenticate_user("armin", "dopadopa123")
+                self.assertIsNotNone(user)
+                self.assertTrue(user["is_admin"])
+                self.assertIsNone(org.authenticate_user("armin", "wrong-password"))

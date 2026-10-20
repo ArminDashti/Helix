@@ -1,4 +1,4 @@
-"""Past-answer memory for sql-expert: save each question with the SQL that answered it.
+"""Past-answer memory for researcher SQL: save each question with the SQL that answered it.
 
 A JSON file keyed next to the markdown store holds {request, sql} pairs. On a new ask the
 closest matches (difflib similarity, stdlib) come back as few-shot examples for the prompt.
@@ -8,6 +8,7 @@ Repeats get faster and more accurate; no external embedding dependency.
 from __future__ import annotations
 
 import json
+import re
 import threading
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -19,6 +20,10 @@ from django.conf import settings
 # examples. Upgrade to a vector index if the store outgrows one warehouse's ask set.
 _MAX_EXAMPLES = 500
 _LOCK = threading.Lock()
+_SCHEMA_TOKEN = re.compile(
+    r"\b(sales|warehouse|global|purchase|humanresource|dbo)\b",
+    re.IGNORECASE,
+)
 
 
 def _path() -> Path:
@@ -48,13 +53,31 @@ def save_example(request: str, sql: str) -> None:
         tmp.replace(_path())
 
 
+def _schema_tokens(text: str) -> set[str]:
+    return {m.group(1).lower() for m in _SCHEMA_TOKEN.finditer(text or "")}
+
+
+def _score_example(ask: str, ask_schemas: set[str], entry: dict[str, str]) -> float:
+    req = str(entry.get("request") or "")
+    sql = str(entry.get("sql") or "")
+    base = SequenceMatcher(None, ask, req.lower()).ratio()
+    if not ask_schemas:
+        return base
+    sql_schemas = _schema_tokens(sql)
+    overlap = len(ask_schemas & sql_schemas)
+    if overlap:
+        base += min(0.25, 0.08 * overlap)
+    return base
+
+
 def similar_examples(request: str, k: int = 3) -> list[dict[str, str]]:
     """Return up to k past examples most similar to the ask."""
     ask = str(request or "").strip().lower()
     if not ask:
         return []
+    ask_schemas = _schema_tokens(request or "")
     scored = [
-        (SequenceMatcher(None, ask, e.get("request", "").lower()).ratio(), e)
+        (_score_example(ask, ask_schemas, e), e)
         for e in _load()
         if e.get("request") and e.get("sql")
     ]

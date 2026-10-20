@@ -20,7 +20,6 @@ from .pipeline_graph import (
     get_pipeline_graph_for_mode,
 )
 from .sql_execute import _sql_error_message, execute_select
-from .user_intent import resolve_user_intent
 
 DATA_GATHERER_MAX_ROWS = 500
 MAX_STEP_LOG_ENTRIES = 30
@@ -293,30 +292,6 @@ def _error_event(
     return _sse(payload)
 
 
-def _resolve_intent_via_db(ctx: dict[str, Any]) -> dict[str, Any]:
-    """Connect to DB (helix.config.yaml) and enrich ctx.prompt with DB intent."""
-    raw_prompt = str(ctx.get("prompt") or "")
-    actor = ctx.get("actor") or {}
-    try:
-        intent = resolve_user_intent(raw_prompt, actor=actor)
-    except Exception as exc:  # noqa: BLE001
-        intent = {
-            "found": False,
-            "resolved_prompt": raw_prompt,
-            "original_prompt": raw_prompt,
-            "source_table": None,
-            "source_row": None,
-            "error": str(exc),
-            "checked_tables": [],
-        }
-    ctx["db_intent"] = intent
-    ctx["original_prompt"] = raw_prompt
-    if intent.get("found") and intent.get("resolved_prompt"):
-        ctx["prompt"] = str(intent["resolved_prompt"])
-        ctx["db_intent_source"] = intent.get("source_table")
-    return intent
-
-
 _DANGEROUS_SNIPPETS = (
     "ignore previous",
     "ignore all instructions",
@@ -493,17 +468,6 @@ def _build_user_message(ctx: dict[str, Any]) -> str:
         f"chart_type={ctx.get('chart_type') or ''}",
         f"actor={json.dumps(ctx.get('actor') or {}, ensure_ascii=False)}",
     ]
-    db_intent = ctx.get("db_intent") or {}
-    if db_intent.get("found"):
-        parts.append(
-            f"DB intent resolved from {db_intent.get('source_table')}. "
-            f"Use the prompt above (original was: {str(ctx.get('original_prompt') or '')[:200]})."
-        )
-    else:
-        checked = ", ".join(db_intent.get("checked_tables") or []) or "catalog"
-        parts.append(
-            f"DB intent lookup found no match (checked: {checked}); use the prompt as-is."
-        )
     calendar_hint = calendar_hint_for_prompt(str(ctx.get("prompt") or ""))
     if calendar_hint:
         parts.append(calendar_hint)
@@ -573,7 +537,7 @@ def _orchester_events(
     *,
     entry: str | None = None,
 ) -> Iterator[dict[str, Any]]:
-    """Yield step events from the LangGraph pipeline (orchester → sql-expert → researcher).
+    """Yield step events from the LangGraph pipeline (orchester → researcher).
 
     ``entry`` re-enters the graph at a node instead of at orchester — that is how a run parked on
     an operator question continues where it stopped.
@@ -623,30 +587,6 @@ def pipeline_events(
     except ValueError as exc:
         yield _error_event(str(exc), ctx=ctx, kind="llm")
         return
-
-    db_intent = _resolve_intent_via_db(ctx)
-    if db_intent.get("found"):
-        intent_msg = _ui_text(
-            language,
-            f"Resolved user intent from DB table {db_intent.get('source_table')}: {str(ctx.get('prompt') or '')[:100]}",
-            f"نیت کاربر از جدول {db_intent.get('source_table')} بازیابی شد: {str(ctx.get('prompt') or '')[:100]}",
-        )
-    else:
-        checked = ", ".join(db_intent.get("checked_tables") or []) or "catalog"
-        detail = db_intent.get("error") or f"checked {checked}"
-        intent_msg = _ui_text(
-            language,
-            f"DB intent lookup ({checked}): {detail[:120]} — using raw prompt",
-            f"جست‌وجوی نیت در DB ({checked}): {detail[:120]} — استفاده از پرامپت خام",
-        )
-    yield _sse(
-        _step_event(
-            ctx,
-            agent_id="db-intent",
-            status="done",
-            message=intent_msg,
-        )
-    )
 
     provider = get_provider()
     provider_name = provider_label(provider)

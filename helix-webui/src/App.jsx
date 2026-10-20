@@ -1,6 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout.jsx";
+import RequireAuth from "./components/RequireAuth.jsx";
 import { ApiStatusProvider } from "./context/ApiStatusContext.jsx";
+import { AuthProvider } from "./context/AuthContext.jsx";
 import { LiveSyncProvider } from "./context/LiveSyncContext.jsx";
 import { I18nProvider } from "./context/I18nContext.jsx";
 import AboutMePage from "./pages/AboutMePage.jsx";
@@ -18,6 +20,7 @@ import ResultsPage from "./pages/ResultsPage.jsx";
 import LogsPage from "./pages/LogsPage.jsx";
 import McpPage from "./pages/McpPage.jsx";
 import KnowledgePage from "./pages/KnowledgePage.jsx";
+import LoginPage from "./pages/LoginPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import SkillsPage from "./pages/SkillsPage.jsx";
 
@@ -27,10 +30,18 @@ export default function App() {
   return (
     <BrowserRouter basename={routerBasename}>
       <I18nProvider>
+      <AuthProvider>
       <LiveSyncProvider>
       <ApiStatusProvider>
         <Routes>
-          <Route element={<Layout />}>
+          <Route path="login" element={<LoginPage />} />
+          <Route
+            element={
+              <RequireAuth>
+                <Layout />
+              </RequireAuth>
+            }
+          >
             <Route index element={<AnalysisPage />} />
             <Route path="results" element={<ResultsPage />} />
             <Route path="results/:resultId" element={<ResultsPage />} />
@@ -52,13 +63,21 @@ export default function App() {
             <Route path="mcp" element={<McpPage />} />
             <Route path="db-explorer" element={<DbExplorerPage />} />
             <Route path="settings" element={<SettingsPage />} />
-            <Route path="admin" element={<AdminPage />} />
+            <Route
+              path="admin"
+              element={
+                <RequireAuth adminOnly>
+                  <AdminPage />
+                </RequireAuth>
+              }
+            />
             <Route path="about-me" element={<AboutMePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
       </ApiStatusProvider>
       </LiveSyncProvider>
+      </AuthProvider>
       </I18nProvider>
     </BrowserRouter>
   );

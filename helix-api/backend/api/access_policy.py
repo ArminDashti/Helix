@@ -11,7 +11,7 @@ from .sample_database import SAMPLE_TABLES
 _TABLE_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_\.]*")
 
 
-def _catalog_tables() -> list[str]:
+def catalog_tables() -> list[str]:
     try:
         from .db_dialects import list_tables
 
@@ -77,7 +77,7 @@ def review_data_access_policy(
             "data_access_plain": cleaned[:2000],
         }
 
-    catalog = _catalog_tables()
+    catalog = catalog_tables()
     catalog_blob = ", ".join(catalog[:200])
     system = (
         "You are the Helix orchester agent reviewing a new company user's "
@@ -162,3 +162,22 @@ def review_data_access_policy(
         "allowed_tables": [],
         "data_access_plain": cleaned,
     }
+
+
+def resolve_allowed_tables_from_catalog(names: list[str] | None) -> list[str]:
+    """Map admin-selected table names to exact catalog entries."""
+    if not names:
+        return []
+    catalog = catalog_tables()
+    catalog_lower = {name.lower(): name for name in catalog}
+    allowed: list[str] = []
+    for item in names:
+        token = str(item or "").strip()
+        if not token:
+            continue
+        match = catalog_lower.get(token.lower()) or catalog_lower.get(
+            token.split(".")[-1].lower()
+        )
+        if match and match not in allowed:
+            allowed.append(match)
+    return allowed

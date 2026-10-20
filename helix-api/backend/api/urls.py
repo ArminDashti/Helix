@@ -4,6 +4,8 @@ from . import views
 
 urlpatterns = [
     path("health/", views.health, name="health"),
+    path("auth/login/", views.auth_login, name="auth-login"),
+    path("auth/me/", views.auth_me, name="auth-me"),
     path("agents/", views.agents_list, name="agents-list"),
     path("agents/<str:agent_id>/instruction/", views.agent_instruction, name="agent-instruction"),
     path("agents/<str:agent_id>/", views.agent_rename, name="agent-rename"),

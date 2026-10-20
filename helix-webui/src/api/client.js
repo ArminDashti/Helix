@@ -5,6 +5,29 @@
 import { notifyMutation } from "../lib/liveBus.js";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+export const AUTH_STORAGE_KEY = "helix-auth-token";
+
+export function getAuthToken() {
+  try {
+    return localStorage.getItem(AUTH_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+export function setAuthToken(token) {
+  try {
+    if (token) localStorage.setItem(AUTH_STORAGE_KEY, token);
+    else localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function authHeaders() {
+  const token = getAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 const errorListeners = new Set();
 
@@ -79,9 +102,10 @@ function toApiError(err, path) {
 async function apiFetch(path, options = {}) {
   const { silent = false, ...fetchOpts } = options;
   const url = apiUrl(path);
+  const headers = { ...authHeaders(), ...(fetchOpts.headers || {}) };
   let response;
   try {
-    response = await fetch(url, fetchOpts);
+    response = await fetch(url, { ...fetchOpts, headers });
   } catch (err) {
     const apiErr = toApiError(err, path);
     if (!silent) emitApiError(apiErr);
@@ -168,6 +192,24 @@ export async function fetchStateVersion({ signal } = {}) {
 
 export async function fetchHealth({ silent = false } = {}) {
   return requestJson("/api/health/", { silent });
+}
+
+export async function login(username, password) {
+  const data = await requestJson("/api/auth/login/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (data?.token) setAuthToken(data.token);
+  return data;
+}
+
+export async function fetchCurrentUser({ silent = true } = {}) {
+  return requestJson("/api/auth/me/", { silent });
+}
+
+export function logout() {
+  setAuthToken("");
 }
 
 export async function fetchAgents() {

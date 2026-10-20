@@ -6,13 +6,16 @@ import {
   BookOpen,
   Database,
   LayoutTemplate,
+  LogOut,
   Play,
   Plug,
   Settings,
   Shield,
   Sparkles,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useApiStatus } from "../context/ApiStatusContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
 import { fetchBranding } from "../api/client.js";
 import { assetUrl } from "../utils/assetUrl.js";
@@ -96,6 +99,8 @@ function NavItem({ link }) {
 
 export default function Layout() {
   const { health, checking } = useApiStatus();
+  const { user, logout, isAdmin } = useAuth();
+  const navigate = useNavigate();
   const { t } = useI18n();
   const [theme, setTheme] = useState(readThemePreference);
   const [online, setOnline] = useState(() => navigator.onLine);
@@ -135,7 +140,7 @@ export default function Layout() {
   ];
 
   const footerLinks = [
-    { to: "/admin", label: t("nav.admin"), icon: Shield },
+    ...(isAdmin ? [{ to: "/admin", label: t("nav.admin"), icon: Shield }] : []),
     { to: "/settings", label: t("nav.settings"), icon: Settings },
   ];
 
@@ -252,6 +257,25 @@ export default function Layout() {
         ))}
 
         <div className="mt-auto space-y-1 pt-2">
+          {user ? (
+            <div className="mb-1 flex items-center gap-2 rounded-xl border border-line/80 bg-fog/30 px-2 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-ink">{user.display_name}</p>
+                <p className="truncate text-[11px] text-muted">{user.username}</p>
+              </div>
+              <button
+                type="button"
+                title={t("auth.signOut")}
+                onClick={() => {
+                  logout();
+                  navigate("/login");
+                }}
+                className="rounded-lg border border-line p-1.5 text-muted hover:bg-fog hover:text-ink"
+              >
+                <LogOut className="size-4" aria-hidden />
+              </button>
+            </div>
+          ) : null}
           {footerLinks.map((link) => (
             <NavItem key={link.to} link={link} />
           ))}

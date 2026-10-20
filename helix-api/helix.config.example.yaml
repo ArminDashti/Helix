@@ -22,8 +22,6 @@ openrouter:
   agents:
     orchester:
       model: "composer-2.5"
-    sql-expert:
-      model: "composer-2.5"
     researcher:
       model: "composer-2.5"
 

@@ -7,14 +7,9 @@ AGENT_PIPELINE = [
         "description": "Inspect the human prompt, set goals, ask the operator, validate the result, package it for the UI",
     },
     {
-        "id": "sql-expert",
-        "name": "sql-expert",
-        "description": "Turn plain-English data asks into one safe read-only SELECT and return the rows",
-    },
-    {
         "id": "researcher",
         "name": "researcher",
-        "description": "Process the SQL rows against the goals and write the result; may ask the operator",
+        "description": "Fetch warehouse rows with read-only SQL and write the result against the goals; may ask the operator",
     },
 ]
 
@@ -49,6 +44,7 @@ LEGACY_AGENT_IDS = frozenset(
         "response_publisher",
         "implementation_auditor",
         "data-gatherer",
+        "sql-expert",
         "validator",
         "result-builder",
         "publisher",
@@ -64,13 +60,14 @@ LEGACY_AGENT_RENAMES = {
     "solution_strategist": "orchester",
     "technical_architect": "orchester",
     "code_builder": "orchester",
-    "sql": "sql-expert",
-    "sql_fetcher": "sql-expert",
+    "sql": "researcher",
+    "sql_fetcher": "researcher",
+    "sql-expert": "researcher",
     "sql_guardian": "orchester",
     "response_builder": "researcher",
     "response_publisher": "orchester",
     "implementation_auditor": "orchester",
-    "data-gatherer": "sql-expert",
+    "data-gatherer": "researcher",
     "validator": "orchester",
     "result-builder": "researcher",
     "publisher": "orchester",
@@ -106,6 +103,6 @@ def is_phase_agent(agent_id: str) -> bool:
 
 
 def is_pipeline_agent(agent_id: str) -> bool:
-    """True for graph-eligible agents (orchester, sql-expert, researcher)."""
+    """True for graph-eligible agents (orchester, researcher)."""
     rid = resolve_agent_definition_id(agent_id)
     return rid in AGENT_BY_ID

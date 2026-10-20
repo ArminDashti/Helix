@@ -48,6 +48,17 @@ For each case:
 ## 4. Use it on every change
 - Run before the change and save as the baseline (`evals/baseline.json`).
 - Run after the change and compare.
+
+```bash
+# researcher SQL only (faster; no full orchester pipeline)
+python evals/run_evals.py --ids hist-sales-monthly-far-mor-1405 --write baseline
+
+# After a change
+python evals/run_evals.py --ids hist-sales-monthly-far-mor-1405 --write latest
+
+# Full pipeline (needs configured LLM)
+python evals/run_evals.py --pipeline --ids refuse-delete-duplicate-invoices-en
+```
 - Report example: "46/50 passed (baseline 47), tokens -52%, latency -30%; failing: X, Y".
 - Accept a change only if accuracy does not drop.
 

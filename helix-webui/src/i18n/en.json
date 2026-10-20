@@ -791,6 +791,16 @@
     "resultMeta": "{{count}} row(s) · {{position}} {{limit}} · ordered by {{column}} {{sort}}",
     "null": "NULL"
   },
+  "auth": {
+    "loading": "Checking sign-in…",
+    "signInTitle": "Sign in to Helix",
+    "signInHint": "Use the account your administrator created for you.",
+    "signIn": "Sign in",
+    "signingIn": "Signing in…",
+    "signOut": "Sign out",
+    "password": "Password",
+    "loginFailed": "Sign-in failed"
+  },
   "admin": {
     "title": "Admin",
     "loading": "Loading admin…",
@@ -815,7 +825,12 @@
     "dataAccess": "Data access",
     "dataAccessAdmin": "Full SELECT (admin)",
     "dataAccessPlaceholder": "e.g. May read SalesOrderHeader and Customer for analytics only",
-    "dataAccessHint": "Describe in plain language which data this user may access. The orchester agent accepts or rejects before the user is saved.",
+    "dataAccessHint": "Pick tables above, or describe access in plain language for the orchester to map to catalog tables.",
+    "allowedTables": "Allowed tables",
+    "allowedTablesHint": "Check every table this user may query. Admins have full SELECT access.",
+    "noCatalogTables": "No tables in the catalog — configure the database in Settings first.",
+    "passwordRequired": "Password is required for new users.",
+    "passwordOptional": "New password (optional)",
     "guideLink": "Admin guide (PDF)"
   },
   "guide": {

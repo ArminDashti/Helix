@@ -1,8 +1,8 @@
-"""LangGraph pipeline: Human → orchester → sql-expert → researcher → orchester → Human.
+"""LangGraph pipeline: Human → orchester → researcher → orchester → Human.
 
-orchester inspects the prompt and sets goals, sql-expert fetches the rows, researcher processes them,
-and orchester validates the result against the goals and packages it. Failures travel back upstream
-in the inbox. Only orchester and researcher can ask the operator; sql-expert never does.
+orchester inspects the prompt and sets goals, researcher fetches warehouse rows and writes the
+result, and orchester validates against the goals and packages it. Failures travel back upstream
+in the inbox. Only orchester and researcher can ask the operator.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from . import token_usage
 from .llm_client import complete_chat_messages
 from .rag_context import select_rag_context
 
-Route = Literal["orchester", "sql-expert", "researcher", "needs_input", "done", "fail"]
+Route = Literal["orchester", "researcher", "needs_input", "done", "fail"]
 
 
 class PipelineState(TypedDict, total=False):
@@ -44,11 +44,11 @@ _OFF_PRODUCT_RE = re.compile(
 
 _MAX_INBOX = 40
 
-# Only agents that talk to the operator can be resumed. sql-expert never asks the human.
+# Only agents that talk to the operator can be resumed.
 _RESUME_NODES = ("orchester", "researcher")
 
 # Workers orchester may send back with a retry. Each gets one retry per run.
-_RETRY_AGENTS = ("sql-expert", "researcher")
+_RETRY_AGENTS = ("researcher",)
 
 # Max questions the operator is asked before the run starts. Above this the run proceeds on its
 # own judgement and the pipeline reports any gap.
@@ -262,7 +262,7 @@ def _inspect_prompt(ctx: dict[str, Any]) -> dict[str, Any]:
     """Orchester's one pass over the prompt: pass/fail, goals, and questions for the operator.
 
     Best effort: when the model is unavailable the run proceeds on the raw prompt rather than
-    failing. The SELECT guard in sql-expert and the researcher still bound what runs.
+    failing. The researcher's SELECT guard and row cap still bound what runs.
     """
     from .pipeline_run import _build_user_message
 
@@ -455,10 +455,10 @@ def node_orchester(state: PipelineState) -> PipelineState:
             )
             state["route"] = "needs_input"
             return state
-        return _go(state, ctx, "sql-expert", _ui(ctx, "Orchester → sql-expert", "Orchester → sql-expert"))
+        return _go(state, ctx, "researcher", _ui(ctx, "Orchester → researcher", "Orchester → researcher"))
 
     if last is None:
-        return _go(state, ctx, "sql-expert", _ui(ctx, "Orchester → sql-expert", "Orchester → sql-expert"))
+        return _go(state, ctx, "researcher", _ui(ctx, "Orchester → researcher", "Orchester → researcher"))
 
     sender = str(last.get("from") or "")
     status = str(last.get("status") or "")
@@ -491,47 +491,6 @@ def _prompt_hard_block_text(prompt: str, ctx: dict[str, Any]) -> str | None:
     return _prompt_hard_block(prompt, ctx.get("actor") or {})
 
 
-def node_sql_expert(state: PipelineState) -> PipelineState:
-    from .pipeline_run import _operator_answers_text
-    from .sql_expert import run_sql_request
-
-    ctx = state["ctx"]
-    state["events"] = []
-    _emit(
-        state,
-        agent_id="sql-expert",
-        status="running",
-        message=_ui(ctx, "sql-expert writing the SELECT…", "sql-expert در حال نوشتن SELECT…"),
-    )
-    parts = [str(ctx.get("prompt") or "")]
-    if ctx.get("goals"):
-        parts.append(f"Goals: {ctx.get('goals')}")
-    answers = _operator_answers_text(ctx)
-    if answers:
-        parts.append(answers)
-    hint = str(ctx.pop("orchester_hint", "") or "").strip()
-    if hint:
-        parts.append(f"Orchester hint for this retry: {hint}")
-    result = run_sql_request("\n\n".join(parts), ctx)
-    if result.get("ok"):
-        rows = int(result.get("row_count") or 0)
-        _emit(
-            state,
-            agent_id="sql-expert",
-            status="done",
-            message=_ui(ctx, f"sql-expert returned {rows} rows", f"sql-expert {rows} ردیف برگرداند"),
-            result="done",
-        )
-        state["route"] = "researcher"  # type: ignore[assignment]
-        return state
-    err = str(result.get("reason") or ctx.get("last_error") or "sql-expert produced no query")
-    ctx["last_error"] = err
-    _tell_orchester(ctx, sender="sql-expert", status="fail", message=err)
-    _emit(state, agent_id="sql-expert", status="failed", message=err, result="fail")
-    state["route"] = "orchester"  # type: ignore[assignment]
-    return state
-
-
 def _researcher_fail(state: PipelineState, ctx: dict[str, Any], err: str) -> PipelineState:
     ctx["last_error"] = err
     _tell_orchester(ctx, sender="researcher", status="fail", message=err)
@@ -541,12 +500,28 @@ def _researcher_fail(state: PipelineState, ctx: dict[str, Any], err: str) -> Pip
 
 
 def _researcher_tools() -> list[dict[str, Any]]:
-    from .sql_expert import ASK_SQL_EXPERT_TOOL
+    from .pipeline_run import EXECUTE_SELECT_TOOL
+    from .sql_expert_tools import SQL_EXPERT_TOOLS
 
-    return [ASK_SQL_EXPERT_TOOL]
+    return SQL_EXPERT_TOOLS + [EXECUTE_SELECT_TOOL]
+
+
+_RESEARCHER_TASK = (
+    "\n\n## Task\n"
+    "You are the only agent that talks to the warehouse. Use describe_table, sample_rows, and "
+    "execute_select to fetch the rows that answer the goals, then write the result from those "
+    "preview numbers only.\n"
+    "If only the operator can settle an ambiguity, reply with result needs_input and one question.\n"
+    "Reply with JSON only when you are finished: "
+    '{"result":"done|fail|needs_input","what_was_done":"...","text_report":"...",'
+    '"chart_type":"bar|line|pie|","message":"short status","question":"asked only when needs_input"}\n'
+    "Do not return result done until execute_select has succeeded and text_report uses only "
+    "numbers from the sql_fetch preview.\n"
+)
 
 
 def node_researcher(state: PipelineState) -> PipelineState:
+    from . import sql_memory
     from .pipeline_run import (
         MAX_TOOL_TURNS,
         _assistant_message_for_history,
@@ -554,7 +529,7 @@ def node_researcher(state: PipelineState) -> PipelineState:
         _parse_tool_args,
         _report_contract,
     )
-    from .sql_expert import run_sql_request
+    from .sql_expert_tools import researcher_sql_dispatch
 
     ctx = state["ctx"]
     state["events"] = []
@@ -562,47 +537,28 @@ def node_researcher(state: PipelineState) -> PipelineState:
         state,
         agent_id="researcher",
         status="running",
-        message=_ui(ctx, "Researcher processing the rows…", "Researcher در حال پردازش ردیف‌ها…"),
+        message=_ui(ctx, "Researcher fetching data and writing the result…", "Researcher در حال واکشی و تحلیل…"),
     )
-    fetch = ctx.get("sql_fetch") if isinstance(ctx.get("sql_fetch"), dict) else None
-    if not fetch:
-        return _researcher_fail(
-            state, ctx, str(ctx.get("last_error") or _ui(ctx, "Researcher has no rows to process", "Researcher ردیفی برای پردازش ندارد"))
-        )
 
-    system = store.assemble_agent_prompt("researcher")
-    system += (
-        "\n\n## Task\n"
-        "The rows from sql-expert are in the user message. Process them against the goals and "
-        "write the result from them.\n"
-        "If a number is missing, call ask_sql_expert once with one plain-English request. "
-        "Never write SQL yourself. If ask_sql_expert returns ok:false, do not retry it.\n"
-        "If only the operator can settle an ambiguity, reply with result needs_input and one question.\n"
-        "Reply with JSON only: "
-        '{"result":"done|fail|needs_input","what_was_done":"...","text_report":"...",'
-        '"chart_type":"bar|line|pie|","message":"short status","question":"asked only when needs_input"}\n'
-        "Ground text_report in the sql_fetch preview numbers only.\n"
-        + _report_contract(ctx)
-        + "\n"
-    )
+    system = store.assemble_agent_prompt("researcher") + _RESEARCHER_TASK + _report_contract(ctx) + "\n"
     hint = str(ctx.pop("orchester_hint", "") or "").strip()
     if hint:
         system += f"Orchester hint for this retry: {hint}\n"
 
-    # Knowledge retrieval: the documents that match this prompt ride along with the rules and the
-    # live catalog. Nothing matching is a normal outcome — the run then reports 0 RAG tokens.
     rag = select_rag_context(str(ctx.get("prompt") or ""))
     if rag.get("text"):
         system += "\n\n" + str(rag["text"])
     ctx["rag"] = {key: value for key, value in rag.items() if key != "text"}
 
-    rows = fetch.get("rows") or []
-    user = (
-        _build_user_message(ctx)
-        + f"\n\ngoals:\n{ctx.get('goals') or ''}"
-        + f"\n\ncolumns: {json.dumps(fetch.get('columns') or [], ensure_ascii=False)}"
-        + f"\npreview_rows: {json.dumps(rows[:12], ensure_ascii=False, default=str)}"
-    )
+    user = _build_user_message(ctx) + f"\n\ngoals:\n{ctx.get('goals') or ''}"
+    fetch = ctx.get("sql_fetch") if isinstance(ctx.get("sql_fetch"), dict) else None
+    if fetch:
+        rows = fetch.get("rows") or []
+        user += (
+            f"\n\ncolumns: {json.dumps(fetch.get('columns') or [], ensure_ascii=False)}"
+            f"\npreview_rows: {json.dumps(rows[:12], ensure_ascii=False, default=str)}"
+        )
+
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": system},
         {"role": "user", "content": user},
@@ -638,14 +594,7 @@ def node_researcher(state: PipelineState) -> PipelineState:
             fn = call.get("function") if isinstance(call.get("function"), dict) else {}
             name = str(fn.get("name") or "").strip()
             args = _parse_tool_args(fn.get("arguments"))
-            if name == "ask_sql_expert":
-                result_json = json.dumps(
-                    run_sql_request(str(args.get("request") or ""), ctx),
-                    ensure_ascii=False,
-                    default=str,
-                )
-            else:
-                result_json = json.dumps({"ok": False, "error": f"{name} is not available here"})
+            result_json = researcher_sql_dispatch(name, args, ctx)
             messages.append(
                 {
                     "role": "tool",
@@ -680,11 +629,27 @@ def node_researcher(state: PipelineState) -> PipelineState:
     if result in ("fail", "failed"):
         return _researcher_fail(state, ctx, status_message or "Researcher found no answer")
 
+    fetch = ctx.get("sql_fetch") if isinstance(ctx.get("sql_fetch"), dict) else None
+    rows = (fetch or {}).get("rows") or []
+    if not fetch or not rows:
+        return _researcher_fail(
+            state,
+            ctx,
+            _ui(
+                ctx,
+                "Researcher must run execute_select before finishing",
+                "Researcher باید قبل از پایان execute_select را اجرا کند",
+            ),
+        )
+
     text_report = str(parsed.get("text_report") or "").strip()
     what_was_done = str(parsed.get("what_was_done") or "").strip() or f"Processed {len(rows)} preview rows"
     chart_type = str(parsed.get("chart_type") or "").strip()
     if chart_type:
         ctx["chart_type"] = chart_type
+    sql_text = str(fetch.get("sql") or "").strip()
+    if sql_text:
+        sql_memory.save_example(str(ctx.get("prompt") or "").strip(), sql_text)
     ctx["what_was_done"] = what_was_done
     ctx["text_report"] = text_report
     ctx.setdefault("artifacts", {})["researcher"] = {
@@ -706,13 +671,9 @@ def node_researcher(state: PipelineState) -> PipelineState:
 
 def _route_from_orchester(state: PipelineState) -> str:
     route = state.get("route") or "fail"
-    if route in ("sql-expert", "researcher"):
+    if route == "researcher":
         return route
     return END
-
-
-def _route_from_sql_expert(state: PipelineState) -> str:
-    return "researcher" if state.get("route") == "researcher" else "orchester"
 
 
 def _entry_node(state: PipelineState) -> str:
@@ -724,22 +685,15 @@ def _entry_node(state: PipelineState) -> str:
 def build_pipeline_graph():
     graph = StateGraph(PipelineState)
     graph.add_node("orchester", node_orchester)
-    graph.add_node("sql-expert", node_sql_expert)
     graph.add_node("researcher", node_researcher)
     graph.add_conditional_edges(START, _entry_node, {node: node for node in _RESUME_NODES})
     graph.add_conditional_edges(
         "orchester",
         _route_from_orchester,
         {
-            "sql-expert": "sql-expert",
             "researcher": "researcher",
             END: END,
         },
-    )
-    graph.add_conditional_edges(
-        "sql-expert",
-        _route_from_sql_expert,
-        {"researcher": "researcher", "orchester": "orchester"},
     )
     graph.add_edge("researcher", "orchester")
     return graph.compile()
@@ -760,7 +714,7 @@ def langgraph_events(
     *,
     entry: str | None = None,
 ) -> Iterator[dict[str, Any]]:
-    """Run the three-agent graph; yield step events; set ctx['_orchester_outcome'].
+    """Run the two-worker graph; yield step events; set ctx['_orchester_outcome'].
 
     ``entry`` resumes a parked run at the node that asked its question instead of starting over.
     """

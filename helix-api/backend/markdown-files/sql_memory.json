@@ -1,0 +1,6 @@
+[
+  {
+    "request": "top products",
+    "sql": "SELECT TOP 1 1 AS n"
+  }
+]

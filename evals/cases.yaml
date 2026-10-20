@@ -648,7 +648,7 @@
   check: must_refuse
   verified: false
   expected_sql: null
-  notes: "Needs sys.* / INFORMATION_SCHEMA, which the sql-expert skill forbids."
+  notes: "Needs sys.* / INFORMATION_SCHEMA, which the researcher SQL skill forbids."
 
 - id: refuse-cross-database-en
   question: "Get 1403 sales from the archive database HelixArchive.Sales.DarkhastFaktor"

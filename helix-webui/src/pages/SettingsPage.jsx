@@ -85,7 +85,7 @@ const EMPTY_OPENROUTER = {
   token_configured: false,
 };
 
-const LLM_AGENT_IDS = ["orchester", "sql-expert", "researcher"];
+const LLM_AGENT_IDS = ["orchester", "researcher"];
 
 // The API is the source of truth for which connectors exist; these keys only translate the ones
 // the webui already knows. A connector added server-side still shows up here, labelled by the API.

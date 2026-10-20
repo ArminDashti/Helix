@@ -1069,20 +1069,89 @@ def _parse_run_options(
     return prompt, mode, language, report_type, chart_type, chart_types, columns
 
 
-def _resolve_actor(body: dict[str, Any]) -> dict[str, Any]:
+def _bearer_token(request: HttpRequest) -> str:
+    auth = str(request.headers.get("Authorization") or "").strip()
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return str(request.headers.get("X-Helix-Token") or "").strip()
+
+
+def _user_from_request(request: HttpRequest) -> dict[str, Any] | None:
+    token = _bearer_token(request)
+    if not token:
+        return None
+    from django.core import signing
+
+    from . import helix_auth
+
+    try:
+        user_id = helix_auth.read_session(token)
+        return org.get_user(user_id)
+    except signing.BadSignature:
+        return None
+
+
+def _require_admin(request: HttpRequest) -> dict[str, Any] | JsonResponse:
+    user = _user_from_request(request)
+    if user is None:
+        return _error("Authentication required", 401)
+    if not user.get("is_admin"):
+        return _error("Admin access required", 403)
+    return user
+
+
+def _actor_from_user_record(user: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": user["id"],
+        "username": user["username"],
+        "is_admin": bool(user.get("is_admin")),
+        "allowed_tables": list(user.get("allowed_tables") or []),
+        "data_access_plain": str(user.get("data_access_plain") or ""),
+    }
+
+
+def _resolve_actor(request: HttpRequest, body: dict[str, Any]) -> dict[str, Any]:
+    token_user = _user_from_request(request)
+    if token_user is not None:
+        return _actor_from_user_record(token_user)
     username = str(body.get("username") or body.get("user") or "").strip().lower()
     if not username:
         return {"username": "guest", "is_admin": False, "is_guest": True}
     for user in org.list_users():
         if user["username"] == username or user["id"] == username:
-            return {
-                "id": user["id"],
-                "username": user["username"],
-                "is_admin": bool(user["is_admin"]),
-                "allowed_tables": list(user.get("allowed_tables") or []),
-                "data_access_plain": str(user.get("data_access_plain") or ""),
-            }
+            return _actor_from_user_record(user)
     return {"username": username, "is_admin": False, "unknown": True}
+
+
+def _coerce_user_access(
+    body: dict[str, Any],
+    *,
+    is_admin: bool,
+    existing_plain: str = "",
+) -> tuple[dict[str, Any] | None, JsonResponse | None]:
+    from .access_policy import resolve_allowed_tables_from_catalog, review_data_access_policy
+
+    raw_tables = body.get("allowed_tables")
+    if isinstance(raw_tables, list):
+        tables = resolve_allowed_tables_from_catalog(raw_tables)
+        if raw_tables:
+            if not is_admin and not tables:
+                return None, _error(
+                    "Select at least one table that exists in the database catalog",
+                    400,
+                )
+            plain = str(body.get("data_access_plain") or existing_plain or "")
+            return {"allowed_tables": tables, "data_access_plain": plain}, None
+    plain = str(body.get("data_access_plain") or existing_plain)
+    review = review_data_access_policy(plain, is_admin=is_admin)
+    if not review.get("accepted"):
+        return None, _error(
+            str(review.get("message") or "Orchester rejected data access"), 400
+        )
+    return {
+        "data_access_plain": str(review.get("data_access_plain") or plain),
+        "allowed_tables": list(review.get("allowed_tables") or []),
+    }, None
 
 
 @csrf_exempt
@@ -1097,7 +1166,7 @@ def runs_stream(request: HttpRequest) -> HttpResponse:
     if isinstance(parsed, JsonResponse):
         return parsed
     prompt, mode, language, report_type, chart_type, chart_types, columns = parsed
-    actor = _resolve_actor(body)
+    actor = _resolve_actor(request, body)
 
     try:
         require_llm()
@@ -1288,7 +1357,7 @@ def chat(request: HttpRequest) -> JsonResponse:
     if isinstance(parsed, JsonResponse):
         return parsed
     prompt, mode, language, report_type, chart_type, chart_types, columns = parsed
-    actor = _resolve_actor(body)
+    actor = _resolve_actor(request, body)
     try:
         require_llm()
     except ValueError as exc:
@@ -1359,28 +1428,59 @@ def sample_tier_ensure(request: HttpRequest, tier_id: str) -> JsonResponse:
 
 
 @csrf_exempt
-@require_http_methods(["GET", "POST"])
-def admin_users(request: HttpRequest) -> JsonResponse:
-    if request.method == "GET":
-        return JsonResponse({"users": org.list_users()})
+@require_http_methods(["POST"])
+def auth_login(request: HttpRequest) -> JsonResponse:
     try:
         body = _json_body(request)
     except ValueError as exc:
         return _error(str(exc))
-    from .access_policy import review_data_access_policy
+    user = org.authenticate_user(
+        str(body.get("username") or ""),
+        str(body.get("password") or ""),
+    )
+    if user is None:
+        return _error("Invalid username or password", 401)
+    from . import helix_auth
+
+    token = helix_auth.issue_session(user["id"])
+    return JsonResponse({"token": token, "user": org.user_wire(user)})
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def auth_me(request: HttpRequest) -> JsonResponse:
+    user = _user_from_request(request)
+    if user is None:
+        return _error("Authentication required", 401)
+    return JsonResponse({"user": org.user_wire(user)})
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def admin_users(request: HttpRequest) -> JsonResponse:
+    denied = _require_admin(request)
+    if isinstance(denied, JsonResponse):
+        return denied
+    if request.method == "GET":
+        return JsonResponse({"users": org.list_users_wire()})
+    try:
+        body = _json_body(request)
+    except ValueError as exc:
+        return _error(str(exc))
 
     is_admin = bool(body.get("is_admin"))
-    plain = str(body.get("data_access_plain") or "")
-    review = review_data_access_policy(plain, is_admin=is_admin)
-    if not review.get("accepted"):
-        return _error(str(review.get("message") or "Orchester rejected data access"), 400)
+    access, err = _coerce_user_access(body, is_admin=is_admin)
+    if err is not None:
+        return err
+    assert access is not None
     try:
         item = org.create_user(
             str(body.get("username") or ""),
             str(body.get("display_name") or ""),
+            password=str(body.get("password") or ""),
             is_admin=is_admin,
-            data_access_plain=str(review.get("data_access_plain") or plain),
-            allowed_tables=list(review.get("allowed_tables") or []),
+            data_access_plain=str(access.get("data_access_plain") or ""),
+            allowed_tables=list(access.get("allowed_tables") or []),
         )
     except ValueError as exc:
         return _error(str(exc))
@@ -1390,6 +1490,9 @@ def admin_users(request: HttpRequest) -> JsonResponse:
 @csrf_exempt
 @require_http_methods(["PUT", "PATCH", "DELETE"])
 def admin_user_detail(request: HttpRequest, user_id: str) -> JsonResponse:
+    denied = _require_admin(request)
+    if isinstance(denied, JsonResponse):
+        return denied
     if request.method == "DELETE":
         try:
             org.delete_user(user_id)
@@ -1403,8 +1506,6 @@ def admin_user_detail(request: HttpRequest, user_id: str) -> JsonResponse:
     except ValueError as exc:
         return _error(str(exc))
     if "data_access_plain" in body or "allowed_tables" in body:
-        from .access_policy import review_data_access_policy
-
         try:
             existing = org.get_user(user_id)
         except KeyError:
@@ -1414,21 +1515,14 @@ def admin_user_detail(request: HttpRequest, user_id: str) -> JsonResponse:
             if "is_admin" in body and body["is_admin"] is not None
             else bool(existing.get("is_admin"))
         )
-        plain = (
-            str(body.get("data_access_plain"))
-            if "data_access_plain" in body
-            else str(existing.get("data_access_plain") or "")
+        existing_plain = str(existing.get("data_access_plain") or "")
+        access, err = _coerce_user_access(
+            body, is_admin=is_admin, existing_plain=existing_plain
         )
-        review = review_data_access_policy(plain, is_admin=is_admin)
-        if not review.get("accepted"):
-            return _error(
-                str(review.get("message") or "Orchester rejected data access"), 400
-            )
-        body = {
-            **body,
-            "data_access_plain": review.get("data_access_plain") or plain,
-            "allowed_tables": list(review.get("allowed_tables") or []),
-        }
+        if err is not None:
+            return err
+        assert access is not None
+        body = {**body, **access}
     try:
         item = org.update_user(user_id, body)
     except KeyError:

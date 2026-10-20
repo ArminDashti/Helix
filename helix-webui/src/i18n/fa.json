@@ -791,6 +791,16 @@
     "resultMeta": "{{count}} ردیف · {{position}} {{limit}} · مرتب بر اساس {{column}} {{sort}}",
     "null": "تهی"
   },
+  "auth": {
+    "loading": "در حال بررسی ورود…",
+    "signInTitle": "ورود به Helix",
+    "signInHint": "با حسابی که مدیر برای شما ساخته وارد شوید.",
+    "signIn": "ورود",
+    "signingIn": "در حال ورود…",
+    "signOut": "خروج",
+    "password": "رمز عبور",
+    "loginFailed": "ورود ناموفق بود"
+  },
   "admin": {
     "title": "مدیریت",
     "loading": "در حال بارگذاری مدیریت…",
@@ -815,7 +825,12 @@
     "dataAccess": "دسترسی به داده",
     "dataAccessAdmin": "دسترسی کامل SELECT (مدیر)",
     "dataAccessPlaceholder": "مثلاً فقط جداول SalesOrderHeader و Customer برای تحلیل",
-    "dataAccessHint": "به زبان ساده بنویسید این کاربر به کدام داده دسترسی دارد. عامل نگهبان پیش از ذخیره می‌پذیرد یا رد می‌کند.",
+    "dataAccessHint": "جداول را بالا انتخاب کنید، یا دسترسی را به زبان ساده بنویسید تا نگهبان به جداول کاتالوگ نگاشت کند.",
+    "allowedTables": "جداول مجاز",
+    "allowedTablesHint": "هر جدولی که کاربر می‌تواند پرس‌وجو کند را انتخاب کنید. مدیران دسترسی کامل SELECT دارند.",
+    "noCatalogTables": "جدولی در کاتالوگ نیست — ابتدا پایگاه داده را در تنظیمات پیکربندی کنید.",
+    "passwordRequired": "رمز عبور برای کاربر جدید الزامی است.",
+    "passwordOptional": "رمز عبور جدید (اختیاری)",
     "guideLink": "راهنمای مدیر (PDF)"
   },
   "guide": {

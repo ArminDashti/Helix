@@ -2,8 +2,8 @@
   "orchester/orchestrate-pipeline": [
     "orchester"
   ],
-  "sql-expert/generate-optimized-select": [
-    "sql-expert"
+  "researcher/generate-optimized-select": [
+    "researcher"
   ],
   "researcher/process-data": [
     "researcher"
