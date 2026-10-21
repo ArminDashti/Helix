@@ -119,7 +119,8 @@ def validate_allowlisted_table(table: str) -> tuple[str, str]:
 
 def describe_table(table: str) -> dict[str, Any]:
     schema, name = validate_allowlisted_table(table)
-    docs = docs_catalog.get_table_docs(f"{schema}.{name}")
+    full_name = f"{schema}.{name}"
+    docs = docs_catalog.get_table_docs(full_name)
     columns = []
     for col in docs.get("columns") or []:
         if not isinstance(col, dict):
@@ -132,20 +133,34 @@ def describe_table(table: str) -> dict[str, Any]:
                 "description": (col.get("description") or col.get("sql_description") or "").strip(),
             }
         )
+    if not columns:
+        try:
+            for col in db_sql.list_columns(schema, name):
+                if not isinstance(col, dict):
+                    continue
+                columns.append(
+                    {
+                        "name": col.get("name"),
+                        "data_type": col.get("data_type"),
+                        "nullable": col.get("nullable"),
+                        "description": "",
+                    }
+                )
+        except Exception:
+            columns = []
     return {
-        "table": docs.get("full_name") or f"{schema}.{name}",
+        "table": docs.get("full_name") or full_name,
         "kind": docs.get("kind") or "table",
         "overview": (docs.get("overview") or "").strip(),
         "columns": columns,
-        "source": docs.get("source"),
+        "source": docs.get("source") or ("live" if columns and not docs.get("columns") else docs.get("source")),
     }
 
 
 def sample_rows(table: str, limit: int = 5) -> dict[str, Any]:
     schema, name = validate_allowlisted_table(table)
     row_limit = max(1, min(int(limit or 5), 5))
-    # db explorer uses 16 as the smallest allowed fetch; return only row_limit rows.
-    fetch_limit = 16
+    fetch_limit = row_limit
     payload = db_sql.select_rows(
         table=f"{schema}.{name}",
         limit=fetch_limit,

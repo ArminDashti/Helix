@@ -211,7 +211,7 @@ def select_rows(
     sort: str = "ASC",
 ) -> dict[str, Any]:
     if limit not in ALLOWED_LIMITS:
-        raise ValueError("limit must be one of 16, 32, 64, 128")
+        raise ValueError("limit must be one of 1, 2, 3, 4, 5, 16, 32, 64, 128")
     position = (position or "top").lower().strip()
     if position not in ("top", "tail"):
         raise ValueError("position must be top or tail")

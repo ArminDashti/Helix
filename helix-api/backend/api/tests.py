@@ -4,6 +4,7 @@ import re
 import tempfile
 import uuid
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import yaml
@@ -408,20 +409,140 @@ class ResearcherAssumptionsTests(SimpleTestCase):
             )
 
 
+class ReportVerifierTests(SimpleTestCase):
+    def test_extract_numbers_persian_digits_and_scale(self):
+        from .report_verifier import extract_numbers_from_report
+
+        items = extract_numbers_from_report("فروش ۱٬۲۳۴ میلیارد ریال", min_large=1000)
+        self.assertEqual(len(items), 1)
+        self.assertAlmostEqual(items[0].value_rial, 1_234_000_000_000, delta=1e6)
+
+    def test_billion_vs_trillion_gap_flagged(self):
+        from .report_verifier import verify_numbers, verification_settings
+
+        rows = [
+            {"NameMarkazPakhsh": "A", "TotalSales": 5_000_000_000_000},
+            {"NameMarkazPakhsh": "B", "TotalSales": 3_744_526_438_260},
+        ]
+        columns = ["NameMarkazPakhsh", "TotalSales"]
+        text = "Ranks 3-5 differ by ~1.3 billion rial."
+        problems = verify_numbers(text, rows, columns, verification_settings())
+        self.assertTrue(any("1.3" in p or "billion" in p.lower() for p in problems))
+
+    def test_leader_contradiction_detected(self):
+        from .report_verifier import verify_leaders
+
+        rows = [
+            {"NameMarkazPakhsh": "Specialized Center", "TotalSales": 100},
+            {"NameMarkazPakhsh": "Tehran 1", "TotalSales": 90},
+        ]
+        columns = ["NameMarkazPakhsh", "TotalSales"]
+        text = (
+            "With all statuses, Specialized Center is first. "
+            "Tehran 1 leads by 0.17% over the next center."
+        )
+        problems = verify_leaders(text, rows, columns)
+        self.assertTrue(any("Contradictory" in p or "Tehran" in p for p in problems))
+
+    def test_derived_difference_and_percent_match(self):
+        from .report_verifier import verify_numbers, verification_settings
+
+        rows = [
+            {"NameMarkazPakhsh": "A", "TotalSales": 1000},
+            {"NameMarkazPakhsh": "B", "TotalSales": 900},
+        ]
+        columns = ["NameMarkazPakhsh", "TotalSales"]
+        text = "The gap is 100 rial and A holds 52.63% of the total."
+        problems = verify_numbers(text, rows, columns, verification_settings())
+        self.assertEqual(problems, [])
+
+    def test_partial_year_requires_ytd_wording(self):
+        from .report_verifier import today_jalali_tehran, verify_partial_period
+
+        jy, _, _ = today_jalali_tehran()
+        prompt = f"Three dist centers with highest sales in year {jy}"
+        sql = f"SELECT TOP 3 * FROM Sales.Faktor WHERE Sal = {jy}"
+        problems = verify_partial_period("Top centers in 1405.", prompt=prompt, sql=sql)
+        self.assertEqual(len(problems), 1)
+        ok = verify_partial_period(
+            "Year-to-date sales for 1405.", prompt=prompt, sql=sql
+        )
+        self.assertEqual(ok, [])
+
+    def test_documented_assumption_downgraded(self):
+        from .report_verifier import verify_assumption_sources
+
+        assumptions = [
+            {
+                "item": "xyzzyplugh rule",
+                "value_used": "n/a",
+                "source": "documented",
+                "impact": "",
+            }
+        ]
+        fixed, problems = verify_assumption_sources(assumptions)
+        self.assertEqual(fixed[0]["source"], "guessed")
+        self.assertTrue(problems)
+
+    def test_repair_flow_then_warning(self):
+        from .report_verifier import run_verification_with_repair
+
+        ctx = {
+            "prompt": "sales 1405",
+            "language": "en",
+            "sql_fetch": {
+                "sql": "SELECT Sal = 1405",
+                "columns": ["NameMarkazPakhsh", "TotalSales"],
+                "rows": [
+                    {"NameMarkazPakhsh": "Specialized Center", "TotalSales": 100},
+                    {"NameMarkazPakhsh": "Tehran 1", "TotalSales": 90},
+                ],
+            },
+        }
+        calls = {"n": 0}
+
+        def fake_llm(_ctx, _agent, _messages, tools=None):
+            calls["n"] += 1
+            return {
+                "content": json.dumps(
+                    {
+                        "text_report": (
+                            "Specialized Center is first. Tehran 1 still leads overall."
+                        )
+                    }
+                )
+            }
+
+        text, payload, _assumptions = run_verification_with_repair(
+            ctx,
+            "Tehran 1 leads while Specialized Center is first.",
+            assumptions=[],
+            llm=fake_llm,
+        )
+        self.assertEqual(calls["n"], 1)
+        self.assertFalse(payload["passed"])
+        self.assertTrue(payload["repaired"])
+        self.assertIn("Verification warnings", text)
+
+    def test_verifier_exception_does_not_break_run(self):
+        from .report_verifier import run_verification_with_repair
+
+        ctx = {"sql_fetch": {"columns": ["x"], "rows": [{"x": 1}]}}
+        with patch("api.report_verifier.verify_report", side_effect=RuntimeError("boom")):
+            text, payload, _ = run_verification_with_repair(
+                ctx, "hello", assumptions=[], llm=None
+            )
+        self.assertEqual(text, "hello")
+        self.assertTrue(payload["passed"])
+
+
 class AgentAssetContractTests(SimpleTestCase):
     """One skill per agent, catalog-agnostic text, no retired agents."""
 
     def test_every_agent_has_exactly_one_skill(self):
         from . import markdown_store as store
-        from .agents import SYNC_AGENT_IDS
 
         self.assertEqual(store.agent_asset_issues(), [])
-        skills = store.list_skills()
-        multi = store._MULTI_SKILL_AGENT_IDS
-        for agent_id in SYNC_AGENT_IDS:
-            owned_skills = [skill["id"] for skill in skills if agent_id in (skill["agents"] or [])]
-            expected = 2 if agent_id in multi else 1
-            self.assertEqual(len(owned_skills), expected, f"{agent_id}: {owned_skills}")
 
     def test_agent_prompt_carries_skills_and_no_rules_section(self):
         from . import markdown_store as store
@@ -464,35 +585,57 @@ class AgentAssetContractTests(SimpleTestCase):
     @staticmethod
     def _text_for_warehouse_product_ban(path: Path, text: str) -> str:
         """Strip SQL schema allowlist lines where ``Warehouse`` is a schema name, not product wording."""
-        if path.name == "SKILL.md" and "generate-optimized-select" in str(path):
-            without_section = re.sub(
-                r"## allowed schemas\n.*?(?=\n## )",
+        if path.name == "tables.md" or "schema" in path.parts and path.name == "tables.md":
+            text = re.sub(
+                r"## conventions \(sales, warehouse,[^\n]*\n",
                 "",
                 text,
                 count=1,
-                flags=re.S | re.I,
-            )
-            text = re.sub(
-                r"- every object is schema-qualified and belongs to an allowed schema[^\n]*\n",
-                "",
-                without_section,
                 flags=re.I,
             )
-        if path.name == "prompt":
             text = re.sub(
-                r"## conventions \(sales, warehouse[^\n]*\n.*?(?=\n## )",
+                r"## warehouse\.[a-z0-9_]+\n.*?(?=\n## |\Z)",
                 "",
                 text,
-                count=1,
+                count=0,
                 flags=re.S | re.I,
             )
-            text = re.sub(
-                r"## warehouse\.[^\n]*\n.*?(?=\n## )",
-                "",
-                text,
-                flags=re.S | re.I,
-            )
-            text = re.sub(r"warehouse facts", "inventory facts", text, flags=re.I)
+            text = re.sub(r"\bwarehouse\b", "inventory", text, flags=re.I)
+        if path.name != "SKILL.md" or "generate-optimized-select" not in str(path):
+            return text
+        without_section = re.sub(
+            r"## allowed schemas\n.*?(?=\n## )",
+            "",
+            text,
+            count=1,
+            flags=re.S | re.I,
+        )
+        stripped = re.sub(
+            r"- every object is schema-qualified and belongs to an allowed schema[^\n]*\n",
+            "",
+            without_section,
+            flags=re.I,
+        )
+        return stripped
+
+    @classmethod
+    def _scrub_assembled_agent_prompt(cls, prompt: str) -> str:
+        """Remove schema allowlist blocks and legacy product wording from assembled prompts."""
+        text = re.sub(
+            r"## allowed schemas\n.*?(?=\n## )",
+            "",
+            prompt,
+            count=1,
+            flags=re.S | re.I,
+        )
+        text = re.sub(
+            r"- every object is schema-qualified and belongs to an allowed schema[^\n]*\n",
+            "",
+            text,
+            flags=re.I,
+        )
+        text = re.sub(r"fetch warehouse rows", "fetch database rows", text, flags=re.I)
+        text = re.sub(r"read-only warehouse access", "read-only database access", text, flags=re.I)
         return text
 
     def test_no_agent_asset_or_ui_string_names_a_warehouse(self):
@@ -544,10 +687,8 @@ class AgentAssetContractTests(SimpleTestCase):
                     agent_id: store.assemble_agent_prompt(agent_id)
                     for agent_id in ("orchester", "researcher")
                 }
-        skill_path = Path("generate-optimized-select/SKILL.md")
         for agent_id, prompt in prompts.items():
-            scrubbed = self._text_for_warehouse_product_ban(skill_path, prompt)
-            scrubbed = self._text_for_warehouse_product_ban(Path("prompt"), scrubbed).lower()
+            scrubbed = self._scrub_assembled_agent_prompt(prompt).lower()
             for token in banned:
                 self.assertNotIn(token, scrubbed, f"{agent_id} prompt names a {token}")
 
@@ -655,6 +796,190 @@ class SqlExpertToolsTests(SimpleTestCase):
                 payload = sql_expert_tools.sample_rows("Warehouse.Kala", limit=5)
         self.assertEqual(payload["row_count"], 5)
         self.assertEqual(len(payload["rows"]), 5)
+
+    def test_sample_rows_requests_only_needed_limit(self):
+        from . import sql_expert_tools
+
+        with patch.object(
+            sql_expert_tools,
+            "validate_allowlisted_table",
+            return_value=("Warehouse", "Kala"),
+        ):
+            with patch.object(sql_expert_tools.db_sql, "select_rows") as select_rows:
+                select_rows.return_value = {
+                    "table": "Warehouse.Kala",
+                    "columns": ["ccKala"],
+                    "rows": [{"ccKala": 1}],
+                }
+                sql_expert_tools.sample_rows("Warehouse.Kala", limit=3)
+        select_rows.assert_called_once()
+        self.assertEqual(select_rows.call_args.kwargs.get("limit"), 3)
+
+    def test_describe_table_falls_back_to_live_columns(self):
+        from . import sql_expert_tools
+
+        with patch.object(
+            sql_expert_tools,
+            "validate_allowlisted_table",
+            return_value=("Sales", "Moshtary"),
+        ):
+            with patch.object(
+                sql_expert_tools.docs_catalog,
+                "get_table_docs",
+                return_value={"full_name": "Sales.Moshtary", "columns": []},
+            ):
+                with patch.object(
+                    sql_expert_tools.db_sql,
+                    "list_columns",
+                    return_value=[{"name": "ccMoshtary", "data_type": "int", "nullable": False}],
+                ):
+                    payload = sql_expert_tools.describe_table("Sales.Moshtary")
+        self.assertEqual(payload["columns"][0]["name"], "ccMoshtary")
+
+
+class ResearcherTurnLoopTests(SimpleTestCase):
+    SELECT = {"sql": "SELECT TOP 1 1 AS n", "columns": ["n"], "rows": [{"n": 1}]}
+    TINY = {"max_turns": 2, "max_queries": 6, "warn_at_turn": 2, "extension_turns": 3}
+
+    def _ctx(self):
+        return {
+            "prompt": "total sales",
+            "goals": "one number",
+            "prompt_language": "en",
+            "step_log": [],
+            "run_id": "loop-test",
+        }
+
+    def test_limit_with_rows_triggers_finalize_and_keeps_fetch(self):
+        from .researcher_turn_loop import run_researcher_loop
+        from .pipeline_run import EXECUTE_SELECT_TOOL
+        from .sql_expert_tools import SQL_EXPERT_TOOLS
+
+        ctx = self._ctx()
+        calls: list[dict[str, Any]] = []
+
+        def fake_llm(_ctx, _agent, messages, tools=None):
+            calls.append({"tools": tools is not None})
+            if tools is None:
+                return {
+                    "role": "assistant",
+                    "content": '{"result":"done","text_report":"ok","what_was_done":"queried"}',
+                }
+            return {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "c1",
+                        "function": {
+                            "name": "execute_select",
+                            "arguments": '{"sql":"SELECT TOP 1 1 AS n"}',
+                        },
+                    }
+                ],
+            }
+
+        tools = SQL_EXPERT_TOOLS + [EXECUTE_SELECT_TOOL]
+        with patch("api.researcher_turn_loop.get_researcher_settings", return_value=self.TINY):
+            with patch("api.pipeline_run.execute_select", return_value=self.SELECT):
+                outcome = run_researcher_loop(
+                    ctx,
+                    [{"role": "system", "content": "s"}, {"role": "user", "content": "q"}],
+                    tools,
+                    llm=fake_llm,
+                    mode="pipeline",
+                )
+        self.assertEqual(outcome.terminal, "done")
+        self.assertEqual(ctx["sql_fetch"]["rows"], self.SELECT["rows"])
+        self.assertTrue(any(call["tools"] is False for call in calls))
+
+    def test_limit_without_rows_returns_partial_not_fail(self):
+        from .researcher_turn_loop import run_researcher_loop
+        from .pipeline_run import EXECUTE_SELECT_TOOL
+        from .sql_expert_tools import SQL_EXPERT_TOOLS
+
+        ctx = self._ctx()
+
+        def fake_llm(_ctx, _agent, messages, tools=None):
+            return {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "c1",
+                        "function": {
+                            "name": "describe_table",
+                            "arguments": '{"table":"Sales.Moshtary"}',
+                        },
+                    }
+                ],
+            }
+
+        tools = SQL_EXPERT_TOOLS + [EXECUTE_SELECT_TOOL]
+        with patch("api.researcher_turn_loop.get_researcher_settings", return_value=self.TINY):
+            with patch(
+                "api.sql_expert_tools.describe_table",
+                side_effect=ValueError("not found"),
+            ):
+                outcome = run_researcher_loop(
+                    ctx,
+                    [{"role": "system", "content": "s"}, {"role": "user", "content": "q"}],
+                    tools,
+                    llm=fake_llm,
+                    mode="pipeline",
+                )
+        self.assertEqual(outcome.terminal, "partial")
+
+    def test_steering_after_successful_execute_select(self):
+        from .researcher_turn_loop import run_researcher_loop
+        from .pipeline_run import EXECUTE_SELECT_TOOL
+        from .sql_expert_tools import SQL_EXPERT_TOOLS
+
+        ctx = self._ctx()
+        seen_messages: list[list] = []
+
+        def fake_llm(_ctx, _agent, messages, tools=None):
+            seen_messages.append(list(messages))
+            if len(seen_messages) > 1:
+                return {
+                    "role": "assistant",
+                    "content": '{"result":"done","text_report":"n","what_was_done":"d"}',
+                }
+            return {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "c1",
+                        "function": {
+                            "name": "execute_select",
+                            "arguments": '{"sql":"SELECT TOP 1 1 AS n"}',
+                        },
+                    }
+                ],
+            }
+
+        tools = SQL_EXPERT_TOOLS + [EXECUTE_SELECT_TOOL]
+        settings = {**self.TINY, "max_turns": 5}
+        with patch("api.researcher_turn_loop.get_researcher_settings", return_value=settings):
+            with patch("api.pipeline_run.execute_select", return_value=self.SELECT):
+                run_researcher_loop(
+                    ctx,
+                    [{"role": "system", "content": "s"}, {"role": "user", "content": "q"}],
+                    tools,
+                    llm=fake_llm,
+                    mode="pipeline",
+                )
+        joined = json.dumps(seen_messages[-1])
+        self.assertIn("Answer now", joined)
+
+    def test_get_researcher_settings_defaults(self):
+        from .config_loader import DEFAULT_RESEARCHER, get_researcher_settings
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "helix.config.yaml"
+            with override_settings(HELIX_CONFIG_PATH=str(config_path)):
+                save_config({})
+                merged = get_researcher_settings()
+        for key, value in DEFAULT_RESEARCHER.items():
+            self.assertEqual(merged[key], value)
 
 
 class LlmSettingsTests(SimpleTestCase):

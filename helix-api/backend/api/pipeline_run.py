@@ -24,7 +24,10 @@ from .sql_execute import _sql_error_message, execute_select
 DATA_GATHERER_MAX_ROWS = 500
 MAX_STEP_LOG_ENTRIES = 30
 FAILURE_STEP_SNAPSHOT = 20
-MAX_TOOL_TURNS = 16
+def max_tool_turns() -> int:
+    from .config_loader import get_researcher_settings
+
+    return int(get_researcher_settings()["max_turns"])
 
 EXECUTE_SELECT_TOOL: dict[str, Any] = {
     "type": "function",
@@ -78,6 +81,7 @@ def _step_event(
     status: str,
     message: str,
     result: str | None = None,
+    detail: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     _append_step_log(
         ctx,
@@ -118,6 +122,11 @@ def _step_event(
     rag = ctx.get("rag")
     if isinstance(rag, dict) and rag.get("docs"):
         payload["rag"] = rag
+    if isinstance(detail, dict) and detail:
+        payload["detail"] = detail
+    prompt_lang = ctx.get("prompt_language")
+    if prompt_lang:
+        payload["prompt_language"] = prompt_lang
     return payload
 
 
@@ -446,6 +455,9 @@ def _package_result(ctx: dict[str, Any]) -> dict[str, Any]:
         "assumptions": ctx.get("assumptions")
         if isinstance(ctx.get("assumptions"), list)
         else None,
+        "verification": ctx.get("verification")
+        if isinstance(ctx.get("verification"), dict)
+        else None,
     }
 
 
@@ -651,10 +663,13 @@ def pipeline_events(
     columns: list[str] | None = None,
     actor: dict[str, Any] | None = None,
 ) -> Iterator[str]:
+    from .researcher_turn_loop import detect_prompt_language
+
     ctx: dict[str, Any] = {
         "prompt": prompt,
         "mode": mode,
         "language": language,
+        "prompt_language": detect_prompt_language(prompt),
         "report_type": report_type,
         "chart_type": chart_type,
         "chart_types": chart_types,

@@ -239,6 +239,18 @@ DEFAULT_SQL = {
     "blocked_tables": [],
 }
 
+DEFAULT_RESEARCHER = {
+    "max_turns": 25,
+    "max_queries": 6,
+    "warn_at_turn": 20,
+    "extension_turns": 3,
+    "verification": {
+        "enabled": True,
+        "tolerance_pct": 1.0,
+        "min_large_number": 10000,
+    },
+}
+
 
 def _migrate_agent_model_map(agents: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
@@ -1433,6 +1445,41 @@ def agent_company_label(agent_id: str) -> str:
     names = get_agent_display_names()
     role = names.get(definition_id, meta.get("name") or definition_id)
     return str(role or agent_id).strip()
+
+
+def get_researcher_settings() -> dict[str, Any]:
+    data = load_config()
+    raw = data.get("researcher")
+    if not isinstance(raw, dict):
+        raw = {}
+    merged = {**DEFAULT_RESEARCHER, **raw}
+    for key in ("max_turns", "max_queries", "warn_at_turn", "extension_turns"):
+        try:
+            merged[key] = max(1, int(merged.get(key) or DEFAULT_RESEARCHER[key]))
+        except (TypeError, ValueError):
+            merged[key] = DEFAULT_RESEARCHER[key]
+    if merged["warn_at_turn"] > merged["max_turns"]:
+        merged["warn_at_turn"] = merged["max_turns"]
+    ver_raw = merged.get("verification")
+    ver_defaults = DEFAULT_RESEARCHER["verification"]
+    if not isinstance(ver_raw, dict):
+        ver_raw = {}
+    verification = {**ver_defaults, **ver_raw}
+    verification["enabled"] = bool(verification.get("enabled", True))
+    try:
+        verification["tolerance_pct"] = float(
+            verification.get("tolerance_pct") or ver_defaults["tolerance_pct"]
+        )
+    except (TypeError, ValueError):
+        verification["tolerance_pct"] = ver_defaults["tolerance_pct"]
+    try:
+        verification["min_large_number"] = float(
+            verification.get("min_large_number") or ver_defaults["min_large_number"]
+        )
+    except (TypeError, ValueError):
+        verification["min_large_number"] = ver_defaults["min_large_number"]
+    merged["verification"] = verification
+    return merged
 
 
 def get_sql_settings() -> dict[str, Any]:

@@ -21,6 +21,7 @@ Output: rows in `sql_fetch` via `execute_select`, then `what_was_done`, `assumpt
 
 ## Procedure
 
+0. Answer with one main `execute_select` first. Open other tables only if that query fails or clearly cannot answer the goals. Do not explore side topics the operator did not ask for.
 1. Parse the ask. Name the grain (what one output row means), the measure (what is counted or summed), the period, and the filter. If any of these is missing and cannot be inferred from the catalog, return `result` fail naming the missing piece. Do not guess wide.
 2. Introspect before writing. Call `describe_table` on each candidate `schema.table`. Read the table Overview in the knowledge notes. When status codes, flags, or date storage is unclear, call `sample_rows` (up to five rows). Use only objects and columns that exist.
 3. Pick the cheapest shape: the driving table, a selective filter, then lookups, then aggregate, then `TOP`/`FETCH`. Prefer a key or an explicit date range on the raw column.
@@ -32,14 +33,14 @@ Output: rows in `sql_fetch` via `execute_select`, then `what_was_done`, `assumpt
 
 ## Business rules (disclose every guess)
 
-Any choice below that is not explicitly documented in `tables.md` or retrieved knowledge is a **guess**. Guesses must appear in the `assumptions` array (`source: guessed`) and in the Assumptions / **فرضیات** section of `text_report`. Do not pad that section with obvious facts.
+Any choice below that is not explicitly documented in `tables.md` or retrieved knowledge is a **guess**. Guesses must appear in the `assumptions` array (`source: guessed`) and in the Assumptions / **فرضیات** section of `text_report`. Do not pad that section with obvious facts. Use `source: documented` **only** when the rule is stated in `tables.md` or retrieved knowledge — never for inferred or unstated rules.
 
 Track and state:
 
 - **Invoice / document status** (e.g. `CodeVazeiat`): which codes are included or excluded, and whether cancelled or legal-hold rows are in the total.
 - **Returns and credits** (e.g. `Sales.ElamMarjoee` or return flags): whether they are subtracted, ignored, or netted elsewhere.
 - **Amount column**: which field is summed (e.g. `MablaghKolFaktor` vs `MablaghKhalesFaktor`) and whether the figure includes VAT/tax.
-- **Date interpretation**: how a Persian month name/year maps to the Gregorian `>= start AND < next_start` range on the raw date column.
+- **Date interpretation**: how a Persian month name/year maps to the Gregorian `>= start AND < next_start` range on the raw date column. When the period is the **current Jalali year or month** (year-to-date), say so explicitly in `text_report` (e.g. year-to-date / تا این تاریخ / تاکنون) — do not imply a full closed year.
 - **Currency unit**: whether amounts are shown in rial or toman (or another divisor).
 - **Inferred columns**: any column meaning taken only from the name or `sample_rows`, not from docs.
 

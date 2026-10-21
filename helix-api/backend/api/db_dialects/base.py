@@ -15,7 +15,7 @@ FORBIDDEN_SQL = re.compile(
     re.IGNORECASE,
 )
 
-ALLOWED_LIMITS = {16, 32, 64, 128}
+ALLOWED_LIMITS = {1, 2, 3, 4, 5, 16, 32, 64, 128}
 
 ENGINE_ALIASES = {
     "postgresql": "postgresql",

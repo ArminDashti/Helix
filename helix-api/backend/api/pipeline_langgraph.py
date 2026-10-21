@@ -47,8 +47,8 @@ _MAX_INBOX = 40
 # Only agents that talk to the operator can be resumed.
 _RESUME_NODES = ("orchester", "researcher")
 
-# Workers orchester may send back with a retry. Each gets one retry per run.
-_RETRY_AGENTS = ("researcher",)
+# Workers orchester may send back with a retry (none for researcher — use review extend).
+_RETRY_AGENTS: tuple[str, ...] = ()
 
 # Max questions the operator is asked before the run starts. Above this the run proceeds on its
 # own judgement and the pipeline reports any gap.
@@ -76,6 +76,17 @@ _VALIDATE_SYSTEM = (
     "preview; any guessed business rule that affects the numbers is listed in Assumptions "
     "(English) or فرضیات (Persian), not hidden in the headline figure.\n"
     "fail: list the specific gaps."
+)
+
+_RESEARCHER_REVIEW_SYSTEM = (
+    "## Review researcher result\n"
+    "You are orchester. The researcher finished or returned a partial answer. Decide once.\n"
+    'Reply with JSON only: {"decision":"done|extend|give_up","missing":"what is missing",'
+    '"instruction":"specific next step for researcher"}\n'
+    "done: goals are met (or partial is acceptable); proceed to package.\n"
+    "extend: only when one short extra research pass with a specific instruction can close a clear "
+    "gap. missing and instruction must be concrete.\n"
+    "give_up: return the best partial answer or ask the operator to clarify."
 )
 
 _ORCHESTER_DECIDE_SYSTEM = (
@@ -170,6 +181,7 @@ def _emit(
     status: str,
     message: str,
     result: str | None = None,
+    detail: dict[str, Any] | None = None,
 ) -> None:
     from .pipeline_run import _step_event
 
@@ -180,6 +192,7 @@ def _emit(
         status=status,
         message=message,
         result=result,
+        detail=detail,
     )
     state.setdefault("events", []).append(event)
 
@@ -294,6 +307,41 @@ def _inspect_prompt(ctx: dict[str, Any]) -> dict[str, Any]:
         "goals": str(parsed.get("goals") or "").strip() or prompt,
         "message": str(parsed.get("message") or "").strip(),
         "questions": questions[:_MAX_CLARIFY_QUESTIONS],
+    }
+
+
+def _orchester_review_researcher(ctx: dict[str, Any]) -> dict[str, Any]:
+    from .pipeline_run import _build_user_message
+
+    fetch = ctx.get("sql_fetch") if isinstance(ctx.get("sql_fetch"), dict) else {}
+    user = (
+        _build_user_message(ctx)
+        + f"\n\ngoals:\n{ctx.get('goals') or ''}"
+        + f"\n\nwhat_was_done:\n{ctx.get('what_was_done') or ''}"
+        + f"\n\ntext_report:\n{ctx.get('text_report') or ''}"
+        + f"\n\ncolumns: {json.dumps(fetch.get('columns') or [], ensure_ascii=False)}"
+        + f"\npreview_rows: {json.dumps((fetch.get('rows') or [])[:12], ensure_ascii=False, default=str)}"
+    )
+    try:
+        assistant = _llm(
+            ctx,
+            "orchester",
+            [
+                {"role": "system", "content": _RESEARCHER_REVIEW_SYSTEM},
+                {"role": "user", "content": user},
+            ],
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"decision": "give_up", "missing": "", "instruction": "", "message": str(exc)}
+    parsed = _parse_json_object(str(assistant.get("content") or ""))
+    decision = str(parsed.get("decision") or "done").strip().lower()
+    if decision not in ("done", "extend", "give_up"):
+        decision = "done"
+    return {
+        "decision": decision,
+        "missing": str(parsed.get("missing") or "").strip(),
+        "instruction": str(parsed.get("instruction") or "").strip(),
+        "message": str(parsed.get("message") or "").strip(),
     }
 
 
@@ -470,16 +518,69 @@ def node_orchester(state: PipelineState) -> PipelineState:
             state["route"] = "needs_input"
             return state
         return _go(state, ctx, route, msg)
-    if sender == "researcher":
-        verdict = _validate_research(ctx)
-        if verdict["result"] not in ("pass", "done", "approved"):
-            gaps = "; ".join(verdict["gaps"]) or verdict["message"] or "Researcher result does not match the goals"
-            route, msg = _orchester_decide(state, ctx, sender="researcher", status="fail", message=gaps)
-            if route == "needs_input":
-                state["route"] = "needs_input"
-                return state
-            return _go(state, ctx, route, msg)
-        return _publish(state, ctx, verdict["message"])
+    if sender == "researcher" and status in ("done", "partial"):
+        snap = ctx.pop("_researcher_extend_snapshot", None)
+        if isinstance(snap, dict):
+            fetch = ctx.get("sql_fetch") if isinstance(ctx.get("sql_fetch"), dict) else {}
+            rows = fetch.get("rows") or []
+            saved = ctx.get("researcher_state") if isinstance(ctx.get("researcher_state"), dict) else {}
+            counters = saved.get("counters") if isinstance(saved.get("counters"), dict) else {}
+            sel = int(counters.get("execute_select_count") or 0)
+            if len(rows) <= int(snap.get("row_count") or 0) and sel <= int(
+                snap.get("execute_select_count") or 0
+            ):
+                ctx["text_report"] = ctx.get("text_report") or _ui(
+                    ctx,
+                    "Research did not progress after extension; returning partial result.",
+                    "پس از تمدید پیشرفتی نبود؛ نتیجه جزئی برگردانده می‌شود.",
+                )
+                return _publish(
+                    state,
+                    ctx,
+                    _ui(ctx, "Partial result after extension", "نتیجه جزئی پس از تمدید"),
+                )
+
+        review = _orchester_review_researcher(ctx)
+        decision = review["decision"]
+        if decision == "extend":
+            from .config_loader import get_researcher_settings
+
+            missing = review["missing"]
+            instruction = review["instruction"]
+            if ctx.get("_researcher_extended") or not missing or not instruction:
+                decision = "give_up"
+            else:
+                ctx["_researcher_extended"] = True
+                fetch = ctx.get("sql_fetch") if isinstance(ctx.get("sql_fetch"), dict) else {}
+                saved = ctx.get("researcher_state") if isinstance(ctx.get("researcher_state"), dict) else {}
+                counters = saved.get("counters") if isinstance(saved.get("counters"), dict) else {}
+                ctx["_researcher_extend_snapshot"] = {
+                    "row_count": len((fetch or {}).get("rows") or []),
+                    "execute_select_count": int(counters.get("execute_select_count") or 0),
+                }
+                settings = get_researcher_settings()
+                ctx["_researcher_extension_budget"] = int(settings["extension_turns"])
+                ctx["_researcher_resume"] = True
+                ctx["_researcher_steering"] = instruction
+                return _go(
+                    state,
+                    ctx,
+                    "researcher",
+                    _ui(ctx, "Orchester extends researcher", "Orchester تحقیق را تمدید می‌کند"),
+                )
+        if decision == "give_up":
+            if not str(ctx.get("text_report") or "").strip():
+                ctx["text_report"] = review["message"] or review["missing"] or _ui(
+                    ctx,
+                    "Could not fully answer; please clarify your question.",
+                    "پاسخ کامل ممکن نبود؛ لطفاً سؤال را روشن‌تر بپرسید.",
+                )
+            return _publish(
+                state,
+                ctx,
+                review["message"] or _ui(ctx, "Partial answer", "پاسخ جزئی"),
+            )
+        return _publish(state, ctx, review["message"])
     err = f"Unknown inbox sender: {sender}"
     ctx["last_error"] = err
     ctx["_orchester_outcome"] = ("fail", err)
@@ -509,7 +610,7 @@ def _researcher_tools() -> list[dict[str, Any]]:
 
 _RESEARCHER_TASK = (
     "\n\n## Task\n"
-    "You are the only agent that talks to the warehouse. Use describe_table, sample_rows, and "
+    "You are the only agent that talks to the database. Use describe_table, sample_rows, and "
     "execute_select to fetch the rows that answer the goals, then write the result from those "
     "preview numbers only.\n"
     "If only the operator can settle an ambiguity, reply with result needs_input and one question.\n"
@@ -525,19 +626,100 @@ _RESEARCHER_TASK = (
 )
 
 
-def node_researcher(state: PipelineState) -> PipelineState:
+def _researcher_complete(
+    state: PipelineState,
+    ctx: dict[str, Any],
+    parsed: dict[str, Any],
+    *,
+    inbox_status: str,
+) -> PipelineState:
     from . import sql_memory
     from .pipeline_run import (
-        MAX_TOOL_TURNS,
-        _assistant_message_for_history,
-        _build_user_message,
-        _parse_tool_args,
-        _report_contract,
         _result_language,
         merge_assumptions_into_text_report,
         normalize_researcher_assumptions,
     )
-    from .sql_expert_tools import researcher_sql_dispatch
+    from .report_verifier import run_verification_with_repair
+
+    fetch = ctx.get("sql_fetch") if isinstance(ctx.get("sql_fetch"), dict) else None
+    rows = (fetch or {}).get("rows") or []
+    status_message = str(parsed.get("message") or "").strip()
+    language = _result_language(ctx)
+    assumptions = normalize_researcher_assumptions(parsed.get("assumptions"))
+    text_report = merge_assumptions_into_text_report(
+        str(parsed.get("text_report") or "").strip(),
+        assumptions,
+        language=language,
+    )
+    what_was_done = (
+        str(parsed.get("what_was_done") or "").strip()
+        or (f"Processed {len(rows)} preview rows" if rows else "Partial research")
+    )
+    text_report, verification, assumptions = run_verification_with_repair(
+        ctx,
+        text_report,
+        assumptions=assumptions,
+        llm=_llm if rows else None,
+    )
+    chart_type = str(parsed.get("chart_type") or "").strip()
+    if chart_type:
+        ctx["chart_type"] = chart_type
+    if fetch and rows:
+        sql_text = str(fetch.get("sql") or "").strip()
+        if sql_text:
+            sql_memory.save_example(str(ctx.get("prompt") or "").strip(), sql_text)
+    ctx["what_was_done"] = what_was_done
+    ctx["text_report"] = text_report
+    ctx["verification"] = verification
+    if assumptions:
+        ctx["assumptions"] = assumptions
+    ctx.setdefault("artifacts", {})["researcher"] = {
+        "message": status_message,
+        "text": text_report,
+        "assumptions": assumptions or None,
+        "verification": verification,
+    }
+    ok = status_message or _ui(
+        ctx,
+        "Research complete" if inbox_status == "done" else "Partial research",
+        "تحقیق کامل شد" if inbox_status == "done" else "تحقیق جزئی",
+    )
+    payload_keys = ["sql_fetch", "text_report", "what_was_done", "verification"]
+    if assumptions:
+        payload_keys.append("assumptions")
+    ver_msg = (
+        "Report verification passed"
+        if verification.get("passed")
+        else f"Report verification: {len(verification.get('problems') or [])} issue(s)"
+    )
+    _emit(
+        state,
+        agent_id="researcher",
+        status="verification",
+        message=ver_msg,
+        detail={"verification": verification},
+    )
+    _tell_orchester(
+        ctx,
+        sender="researcher",
+        status=inbox_status,
+        message=ok,
+        payload_keys=payload_keys,
+    )
+    _emit(
+        state,
+        agent_id="researcher",
+        status="done" if inbox_status == "done" else "partial",
+        message=ok,
+        result=inbox_status,
+    )
+    state["route"] = "orchester"  # type: ignore[assignment]
+    return state
+
+
+def node_researcher(state: PipelineState) -> PipelineState:
+    from .pipeline_run import _build_user_message, _report_contract, max_tool_turns
+    from .researcher_turn_loop import prompt_language, run_researcher_loop
 
     ctx = state["ctx"]
     state["events"] = []
@@ -548,94 +730,73 @@ def node_researcher(state: PipelineState) -> PipelineState:
         message=_ui(ctx, "Researcher fetching data and writing the result…", "Researcher در حال واکشی و تحلیل…"),
     )
 
-    system = store.assemble_agent_prompt("researcher") + _RESEARCHER_TASK + _report_contract(ctx) + "\n"
-    hint = str(ctx.pop("orchester_hint", "") or "").strip()
-    if hint:
-        system += f"Orchester hint for this retry: {hint}\n"
-
-    rag = select_rag_context(str(ctx.get("prompt") or ""))
-    if rag.get("text"):
-        system += "\n\n" + str(rag["text"])
-    ctx["rag"] = {key: value for key, value in rag.items() if key != "text"}
-
-    user = _build_user_message(ctx) + f"\n\ngoals:\n{ctx.get('goals') or ''}"
-    fetch = ctx.get("sql_fetch") if isinstance(ctx.get("sql_fetch"), dict) else None
-    if fetch:
-        rows = fetch.get("rows") or []
-        user += (
-            f"\n\ncolumns: {json.dumps(fetch.get('columns') or [], ensure_ascii=False)}"
-            f"\npreview_rows: {json.dumps(rows[:12], ensure_ascii=False, default=str)}"
-        )
-
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
-    ]
-    tools = _researcher_tools()
-    parsed: dict[str, Any] = {}
-
-    for turn in range(1, MAX_TOOL_TURNS + 1):
-        _emit(
-            state,
-            agent_id="researcher",
-            status="running",
-            message=_ui(
-                ctx,
-                f"Researcher turn {turn}/{MAX_TOOL_TURNS}…",
-                f"نوبت researcher {turn}/{MAX_TOOL_TURNS}…",
-            ),
-        )
-        try:
-            assistant = _llm(ctx, "researcher", messages, tools=tools)
-        except Exception as exc:  # noqa: BLE001
-            return _researcher_fail(state, ctx, str(exc))
-
-        tool_calls = assistant.get("tool_calls")
-        if not isinstance(tool_calls, list) or not tool_calls:
-            parsed = _parse_json_object(str(assistant.get("content") or ""))
-            break
-
-        messages.append(_assistant_message_for_history(assistant))
-        for call in tool_calls:
-            if not isinstance(call, dict):
-                continue
-            fn = call.get("function") if isinstance(call.get("function"), dict) else {}
-            name = str(fn.get("name") or "").strip()
-            args = _parse_tool_args(fn.get("arguments"))
-            result_json = researcher_sql_dispatch(name, args, ctx)
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": str(call.get("id") or name or "tool"),
-                    "content": result_json,
-                }
-            )
-            _emit(
-                state,
-                agent_id="researcher",
-                status="running",
-                message=f"{name} → {result_json[:160]}",
-            )
+    saved = ctx.get("researcher_state") if isinstance(ctx.get("researcher_state"), dict) else None
+    resume = bool(ctx.pop("_researcher_resume", False))
+    messages: list[dict[str, Any]]
+    if resume and saved and isinstance(saved.get("messages"), list):
+        messages = list(saved["messages"])
     else:
-        return _researcher_fail(
-            state,
-            ctx,
-            _ui(
-                ctx,
-                f"Researcher exceeded {MAX_TOOL_TURNS} turns",
-                f"Researcher بیش از {MAX_TOOL_TURNS} نوبت اجرا شد",
-            ),
-        )
+        system = store.assemble_agent_prompt("researcher") + _RESEARCHER_TASK + _report_contract(ctx) + "\n"
+        hint = str(ctx.pop("orchester_hint", "") or "").strip()
+        if hint:
+            system += f"Orchester hint for this retry: {hint}\n"
 
-    status_message = str(parsed.get("message") or "").strip()
-    result = str(parsed.get("result") or "done").strip().lower()
-    question = str(parsed.get("question") or "").strip()
-    if result in ("needs_input", "ask", "question") and question:
-        _ask_operator(state, agent_id="researcher", questions=[_question("q1", question)])
-        state["route"] = "orchester"  # type: ignore[assignment]
-        return state
-    if result in ("fail", "failed"):
-        return _researcher_fail(state, ctx, status_message or "Researcher found no answer")
+        rag = select_rag_context(str(ctx.get("prompt") or ""))
+        if rag.get("text"):
+            system += "\n\n" + str(rag["text"])
+        ctx["rag"] = {key: value for key, value in rag.items() if key != "text"}
+
+        user = _build_user_message(ctx) + f"\n\ngoals:\n{ctx.get('goals') or ''}"
+        fetch = ctx.get("sql_fetch") if isinstance(ctx.get("sql_fetch"), dict) else None
+        if fetch:
+            rows = fetch.get("rows") or []
+            user += (
+                f"\n\ncolumns: {json.dumps(fetch.get('columns') or [], ensure_ascii=False)}"
+                f"\npreview_rows: {json.dumps(rows[:12], ensure_ascii=False, default=str)}"
+            )
+
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+
+    tools = _researcher_tools()
+    limit = max_tool_turns() + int(ctx.get("_researcher_extension_budget") or 0)
+
+    def on_turn(detail: dict[str, Any]) -> None:
+        turn = int(detail.get("turn") or 0)
+        short = f"Researcher turn {turn}/{limit}…"
+        if prompt_language(ctx) == "fa":
+            short = f"نوبت researcher {turn}/{limit}…"
+        tools_used = detail.get("tools") or []
+        if tools_used:
+            name = str(tools_used[0].get("name") or "tool")
+            short = f"{name} → …"
+        _emit(state, agent_id="researcher", status="running", message=short, detail=detail)
+
+    outcome = run_researcher_loop(
+        ctx,
+        messages,
+        tools,
+        llm=_llm,
+        mode="pipeline",
+        on_turn=on_turn,
+        report_contract=_report_contract(ctx),
+    )
+    parsed = outcome.parsed
+
+    if outcome.terminal == "error":
+        return _researcher_fail(state, ctx, outcome.message)
+    if outcome.terminal == "needs_input":
+        question = str(parsed.get("question") or "").strip()
+        if question:
+            _ask_operator(state, agent_id="researcher", questions=[_question("q1", question)])
+            state["route"] = "orchester"  # type: ignore[assignment]
+            return state
+    if outcome.terminal == "fail":
+        return _researcher_fail(state, ctx, outcome.message or "Researcher found no answer")
+    if outcome.terminal == "partial":
+        return _researcher_complete(state, ctx, parsed, inbox_status="partial")
 
     fetch = ctx.get("sql_fetch") if isinstance(ctx.get("sql_fetch"), dict) else None
     rows = (fetch or {}).get("rows") or []
@@ -649,44 +810,7 @@ def node_researcher(state: PipelineState) -> PipelineState:
                 "Researcher باید قبل از پایان execute_select را اجرا کند",
             ),
         )
-
-    language = _result_language(ctx)
-    assumptions = normalize_researcher_assumptions(parsed.get("assumptions"))
-    text_report = merge_assumptions_into_text_report(
-        str(parsed.get("text_report") or "").strip(),
-        assumptions,
-        language=language,
-    )
-    what_was_done = str(parsed.get("what_was_done") or "").strip() or f"Processed {len(rows)} preview rows"
-    chart_type = str(parsed.get("chart_type") or "").strip()
-    if chart_type:
-        ctx["chart_type"] = chart_type
-    sql_text = str(fetch.get("sql") or "").strip()
-    if sql_text:
-        sql_memory.save_example(str(ctx.get("prompt") or "").strip(), sql_text)
-    ctx["what_was_done"] = what_was_done
-    ctx["text_report"] = text_report
-    if assumptions:
-        ctx["assumptions"] = assumptions
-    ctx.setdefault("artifacts", {})["researcher"] = {
-        "message": status_message,
-        "text": text_report,
-        "assumptions": assumptions or None,
-    }
-    ok = status_message or _ui(ctx, "Research complete", "تحقیق کامل شد")
-    payload_keys = ["sql_fetch", "text_report", "what_was_done"]
-    if assumptions:
-        payload_keys.append("assumptions")
-    _tell_orchester(
-        ctx,
-        sender="researcher",
-        status="done",
-        message=ok,
-        payload_keys=payload_keys,
-    )
-    _emit(state, agent_id="researcher", status="done", message=ok, result="done")
-    state["route"] = "orchester"  # type: ignore[assignment]
-    return state
+    return _researcher_complete(state, ctx, parsed, inbox_status="done")
 
 
 def _route_from_orchester(state: PipelineState) -> str:
