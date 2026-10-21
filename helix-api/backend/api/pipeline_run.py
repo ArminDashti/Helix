@@ -443,7 +443,78 @@ def _package_result(ctx: dict[str, Any]) -> dict[str, Any]:
         "used_demo": False,
         "token_usage": token_usage.snapshot(ctx),
         "rag": ctx.get("rag") if isinstance(ctx.get("rag"), dict) else None,
+        "assumptions": ctx.get("assumptions")
+        if isinstance(ctx.get("assumptions"), list)
+        else None,
     }
+
+
+def normalize_researcher_assumptions(raw: Any) -> list[dict[str, str]]:
+    """Normalize researcher assumptions JSON to a stable list of dicts."""
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, str]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        item = str(entry.get("item") or "").strip()
+        if not item:
+            continue
+        source = str(entry.get("source") or "guessed").strip().lower()
+        if source not in ("documented", "guessed"):
+            source = "guessed"
+        out.append(
+            {
+                "item": item,
+                "value_used": str(entry.get("value_used") or "").strip(),
+                "source": source,
+                "impact": str(entry.get("impact") or "").strip(),
+            }
+        )
+    return out
+
+
+def format_assumptions_section(
+    assumptions: list[dict[str, str]], *, language: str
+) -> str:
+    """Build the user-facing Assumptions section (guessed rules only)."""
+    guessed = [a for a in assumptions if a.get("source") == "guessed"]
+    if not guessed:
+        return ""
+    heading = "فرضیات" if language == "fa" else "Assumptions"
+    closing = (
+        "اگر فرضیات بالا درست نیست، بگویید تا دوباره محاسبه کنم."
+        if language == "fa"
+        else "If any assumption above is wrong, say so and I can recalculate."
+    )
+    lines = [heading, ""]
+    for assumption in guessed:
+        item = assumption.get("item") or ""
+        value = assumption.get("value_used") or ""
+        impact = assumption.get("impact") or ""
+        line = f"- {item}: {value}" if value else f"- {item}"
+        if impact:
+            line = f"{line} — {impact}"
+        lines.append(line)
+    lines.extend(["", closing])
+    return "\n".join(lines)
+
+
+def merge_assumptions_into_text_report(
+    text_report: str,
+    assumptions: list[dict[str, str]],
+    *,
+    language: str,
+) -> str:
+    """Append a formatted assumptions block when the model omitted it from prose."""
+    section = format_assumptions_section(assumptions, language=language)
+    if not section:
+        return text_report
+    marker = "فرضیات" if language == "fa" else "Assumptions"
+    if marker in text_report:
+        return text_report
+    base = (text_report or "").rstrip()
+    return f"{base}\n\n{section}" if base else section
 
 
 def _report_contract(ctx: dict[str, Any]) -> str:
@@ -455,7 +526,19 @@ def _report_contract(ctx: dict[str, Any]) -> str:
         if language == "fa"
         else "Write text_report (and message) in English. Keep SQL identifiers unchanged."
     )
-    return f"{_report_length_hint(report_level, language)}\n{lang_line}"
+    assumptions_line = (
+        "End text_report with a فرضیات section listing every guessed business rule that affects "
+        "the numbers (invoice status codes, returns/credits, amount column and VAT, date range, "
+        "currency unit, inferred column meanings). Documented facts belong in the main answer, not "
+        "in فرضیات. Finish with one short line inviting the user to confirm or correct."
+        if language == "fa"
+        else "End text_report with an Assumptions section listing every guessed business rule that "
+        "affects the numbers (invoice status codes, returns/credits, amount column and VAT, date "
+        "range, currency unit, inferred column meanings). Documented facts belong in the main "
+        "answer, not in Assumptions. Finish with one short line inviting the user to confirm or "
+        "correct."
+    )
+    return f"{_report_length_hint(report_level, language)}\n{lang_line}\n{assumptions_line}"
 
 
 def _build_user_message(ctx: dict[str, Any]) -> str:

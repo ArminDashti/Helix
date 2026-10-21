@@ -9,8 +9,8 @@ description: Inspect the human prompt, set goals, route Human → researcher →
 1. Read the human prompt, mode, language, and report_type. Block writes, DDL, code generation, and off-product asks.
 2. Set `goals`: one or two plain sentences for what the final answer must deliver.
 3. Send the run to researcher with the goals and prompt.
-4. Validate researcher's `what_was_done` and `text_report` against `goals`. Every number must come from the `sql_fetch` preview.
-5. Pass: package `{ text_report, grid, echarts_option }` from the same `sql_fetch`. Null whatever `mode` does not require.
+4. Validate researcher's `what_was_done` and `text_report` against `goals`. Every number must come from the `sql_fetch` preview. Reject (gap) answers that hide guessed business rules—status filters, returns, amount column/VAT, dates, currency—without an Assumptions / **فرضیات** section listing them.
+5. Pass: package `{ text_report, grid, echarts_option, assumptions }` from the same `sql_fetch`. Do not shorten or remove the Assumptions / **فرضیات** block from `text_report`. Null whatever `mode` does not require.
 6. Gap: retry researcher once with a short hint, or stop with the gap list.
 7. Researcher failure: retry that worker once with a hint, ask the operator one short question, or stop with the agent's message.
 
