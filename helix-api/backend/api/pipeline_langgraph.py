@@ -73,7 +73,8 @@ _VALIDATE_SYSTEM = (
     "You are orchester. Check the researcher's result against the goals.\n"
     'Reply with JSON only: {"result":"pass|fail","gaps":["..."],"message":"short status"}\n'
     "pass: what_was_done fulfils the goals and text_report uses only numbers from the sql_fetch "
-    "preview.\n"
+    "preview; any guessed business rule that affects the numbers is listed in Assumptions "
+    "(English) or فرضیات (Persian), not hidden in the headline figure.\n"
     "fail: list the specific gaps."
 )
 
@@ -514,7 +515,11 @@ _RESEARCHER_TASK = (
     "If only the operator can settle an ambiguity, reply with result needs_input and one question.\n"
     "Reply with JSON only when you are finished: "
     '{"result":"done|fail|needs_input","what_was_done":"...","text_report":"...",'
+    '"assumptions":[{"item":"...","value_used":"...","source":"documented|guessed","impact":"..."}],'
     '"chart_type":"bar|line|pie|","message":"short status","question":"asked only when needs_input"}\n'
+    "assumptions: one entry per business rule that affects the answer; source documented only when "
+    "tables.md/RAG states it, otherwise guessed. Only guessed items belong in the Assumptions/"
+    "فرضیات section of text_report.\n"
     "Do not return result done until execute_select has succeeded and text_report uses only "
     "numbers from the sql_fetch preview.\n"
 )
@@ -528,6 +533,9 @@ def node_researcher(state: PipelineState) -> PipelineState:
         _build_user_message,
         _parse_tool_args,
         _report_contract,
+        _result_language,
+        merge_assumptions_into_text_report,
+        normalize_researcher_assumptions,
     )
     from .sql_expert_tools import researcher_sql_dispatch
 
@@ -642,7 +650,13 @@ def node_researcher(state: PipelineState) -> PipelineState:
             ),
         )
 
-    text_report = str(parsed.get("text_report") or "").strip()
+    language = _result_language(ctx)
+    assumptions = normalize_researcher_assumptions(parsed.get("assumptions"))
+    text_report = merge_assumptions_into_text_report(
+        str(parsed.get("text_report") or "").strip(),
+        assumptions,
+        language=language,
+    )
     what_was_done = str(parsed.get("what_was_done") or "").strip() or f"Processed {len(rows)} preview rows"
     chart_type = str(parsed.get("chart_type") or "").strip()
     if chart_type:
@@ -652,17 +666,23 @@ def node_researcher(state: PipelineState) -> PipelineState:
         sql_memory.save_example(str(ctx.get("prompt") or "").strip(), sql_text)
     ctx["what_was_done"] = what_was_done
     ctx["text_report"] = text_report
+    if assumptions:
+        ctx["assumptions"] = assumptions
     ctx.setdefault("artifacts", {})["researcher"] = {
         "message": status_message,
         "text": text_report,
+        "assumptions": assumptions or None,
     }
     ok = status_message or _ui(ctx, "Research complete", "تحقیق کامل شد")
+    payload_keys = ["sql_fetch", "text_report", "what_was_done"]
+    if assumptions:
+        payload_keys.append("assumptions")
     _tell_orchester(
         ctx,
         sender="researcher",
         status="done",
         message=ok,
-        payload_keys=["sql_fetch", "text_report", "what_was_done"],
+        payload_keys=payload_keys,
     )
     _emit(state, agent_id="researcher", status="done", message=ok, result="done")
     state["route"] = "orchester"  # type: ignore[assignment]

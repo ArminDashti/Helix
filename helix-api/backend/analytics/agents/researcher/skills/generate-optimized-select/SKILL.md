@@ -6,7 +6,7 @@ description: Turn the goals and prompt into one safe, bounded, index-friendly SE
 # generate-optimized-select
 
 Input: goals and the operator prompt, optional period, grain, limit, language.
-Output: rows in `sql_fetch` via `execute_select`, then `what_was_done` and `text_report` from the preview.
+Output: rows in `sql_fetch` via `execute_select`, then `what_was_done`, `assumptions`, and `text_report` from the preview.
 
 ## Allowed schemas
 
@@ -26,7 +26,23 @@ Output: rows in `sql_fetch` via `execute_select`, then `what_was_done` and `text
 4. Run the pre-flight checklist below. If any check fails, fix the SQL before running it.
 5. Call `execute_select` with the final bounded SELECT. Read `row_count`, the columns, and the preview.
 6. If the result is empty, implausible, or errored, change exactly one thing (filter, period, or join key) and run up to three `execute_select` revisions. Never resend identical SQL.
-7. Write `what_was_done` and `text_report` from the preview numbers only, then return `result` done.
+7. When a business rule is unclear, prefer one extra bounded aggregate over silent guessing. If a cheap alternative filter or amount column would materially change the total, run that second `execute_select` and show both figures briefly in `text_report`.
+8. Write `what_was_done`, `assumptions`, and `text_report` from the preview numbers only, then return `result` done.
+
+## Business rules (disclose every guess)
+
+Any choice below that is not explicitly documented in `tables.md` or retrieved knowledge is a **guess**. Guesses must appear in the `assumptions` array (`source: guessed`) and in the Assumptions / **فرضیات** section of `text_report`. Do not pad that section with obvious facts.
+
+Track and state:
+
+- **Invoice / document status** (e.g. `CodeVazeiat`): which codes are included or excluded, and whether cancelled or legal-hold rows are in the total.
+- **Returns and credits** (e.g. `Sales.ElamMarjoee` or return flags): whether they are subtracted, ignored, or netted elsewhere.
+- **Amount column**: which field is summed (e.g. `MablaghKolFaktor` vs `MablaghKhalesFaktor`) and whether the figure includes VAT/tax.
+- **Date interpretation**: how a Persian month name/year maps to the Gregorian `>= start AND < next_start` range on the raw date column.
+- **Currency unit**: whether amounts are shown in rial or toman (or another divisor).
+- **Inferred columns**: any column meaning taken only from the name or `sample_rows`, not from docs.
+
+When a guess materially changes the result and an alternative is cheap (one bounded aggregate), show the main answer plus the alternative (e.g. all statuses vs only 6,7,8) in one or two short lines before Assumptions.
 
 ## Pre-flight checklist (must pass before execute)
 

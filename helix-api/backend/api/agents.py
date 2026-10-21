@@ -9,7 +9,7 @@ AGENT_PIPELINE = [
     {
         "id": "researcher",
         "name": "researcher",
-        "description": "Fetch warehouse rows with read-only SQL and write the result against the goals; may ask the operator",
+        "description": "Fetch database rows with read-only SQL and write the result against the goals; may ask the operator",
     },
 ]
 

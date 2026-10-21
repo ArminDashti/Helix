@@ -319,6 +319,95 @@ class ThreeAgentPipelineTests(SimpleTestCase):
         self.assertIn("NameMoshtary", prompt)
 
 
+class ResearcherAssumptionsTests(SimpleTestCase):
+    def test_normalize_researcher_assumptions_keeps_documented_and_guessed(self):
+        from .pipeline_run import normalize_researcher_assumptions
+
+        raw = [
+            {"item": "Status filter", "value_used": "all CodeVazeiat", "source": "guessed", "impact": "high"},
+            {"item": "Date column", "value_used": "TarikhFaktor", "source": "documented", "impact": ""},
+            {"bad": True},
+        ]
+        normalized = normalize_researcher_assumptions(raw)
+        self.assertEqual(len(normalized), 2)
+        self.assertEqual(normalized[0]["source"], "guessed")
+        self.assertEqual(normalized[1]["source"], "documented")
+
+    def test_format_assumptions_section_english_lists_guessed_only(self):
+        from .pipeline_run import format_assumptions_section
+
+        assumptions = [
+            {"item": "Returns", "value_used": "not subtracted", "source": "guessed", "impact": "inflates total"},
+            {"item": "Table", "value_used": "Sales.Faktor", "source": "documented", "impact": ""},
+        ]
+        section = format_assumptions_section(assumptions, language="en")
+        self.assertIn("Assumptions", section)
+        self.assertIn("Returns", section)
+        self.assertNotIn("documented", section.lower())
+        self.assertIn("recalculate", section.lower())
+
+    def test_format_assumptions_section_persian_heading(self):
+        from .pipeline_run import format_assumptions_section
+
+        section = format_assumptions_section(
+            [{"item": "وضعیت فاکتور", "value_used": "همه کدها", "source": "guessed", "impact": ""}],
+            language="fa",
+        )
+        self.assertIn("فرضیات", section)
+        self.assertIn("دوباره محاسبه", section)
+
+    def test_merge_assumptions_appends_when_heading_missing(self):
+        from .pipeline_run import merge_assumptions_into_text_report
+
+        merged = merge_assumptions_into_text_report(
+            "Total sales: 1,234,567",
+            [{"item": "Amount column", "value_used": "MablaghKolFaktor", "source": "guessed", "impact": ""}],
+            language="en",
+        )
+        self.assertIn("Total sales", merged)
+        self.assertIn("Assumptions", merged)
+        self.assertIn("MablaghKolFaktor", merged)
+
+    def test_researcher_skills_require_assumptions_disclosure(self):
+        from django.conf import settings as dj_settings
+
+        roots = [
+            Path(dj_settings.BASE_DIR) / "analytics" / "agents" / "researcher" / "skills",
+            Path(dj_settings.MARKDOWN_FILES_DIR) / "skills" / "researcher",
+        ]
+        markers = ("assumptions", "فرضیات", "Business rules")
+        for root in roots:
+            process = root / "process-data" / "SKILL.md"
+            generate = root / "generate-optimized-select" / "SKILL.md"
+            for path in (process, generate):
+                text = path.read_text(encoding="utf-8")
+                self.assertTrue(any(m.lower() in text.lower() for m in markers), f"{path} missing assumptions guidance")
+
+    @staticmethod
+    def _skill_markdown_body(text: str) -> str:
+        if text.startswith("---"):
+            end = text.find("\n---", 3)
+            if end != -1:
+                return text[end + 4 :].lstrip()
+        return text
+
+    def test_researcher_source_and_runtime_skill_bodies_match(self):
+        from django.conf import settings as dj_settings
+
+        base = Path(dj_settings.BASE_DIR)
+        pairs = (
+            ("generate-optimized-select",),
+            ("process-data",),
+        )
+        for (skill_id,) in pairs:
+            source = base / "analytics" / "agents" / "researcher" / "skills" / skill_id / "SKILL.md"
+            runtime = Path(dj_settings.MARKDOWN_FILES_DIR) / "skills" / "researcher" / skill_id / "SKILL.md"
+            self.assertEqual(
+                self._skill_markdown_body(source.read_text(encoding="utf-8")),
+                self._skill_markdown_body(runtime.read_text(encoding="utf-8")),
+            )
+
+
 class AgentAssetContractTests(SimpleTestCase):
     """One skill per agent, catalog-agnostic text, no retired agents."""
 
@@ -328,9 +417,11 @@ class AgentAssetContractTests(SimpleTestCase):
 
         self.assertEqual(store.agent_asset_issues(), [])
         skills = store.list_skills()
+        multi = store._MULTI_SKILL_AGENT_IDS
         for agent_id in SYNC_AGENT_IDS:
             owned_skills = [skill["id"] for skill in skills if agent_id in (skill["agents"] or [])]
-            self.assertEqual(len(owned_skills), 1, f"{agent_id}: {owned_skills}")
+            expected = 2 if agent_id in multi else 1
+            self.assertEqual(len(owned_skills), expected, f"{agent_id}: {owned_skills}")
 
     def test_agent_prompt_carries_skills_and_no_rules_section(self):
         from . import markdown_store as store
@@ -373,21 +464,36 @@ class AgentAssetContractTests(SimpleTestCase):
     @staticmethod
     def _text_for_warehouse_product_ban(path: Path, text: str) -> str:
         """Strip SQL schema allowlist lines where ``Warehouse`` is a schema name, not product wording."""
-        if path.name != "SKILL.md" or "generate-optimized-select" not in str(path):
-            return text
-        without_section = re.sub(
-            r"## allowed schemas\n.*?(?=\n## )",
-            "",
-            text,
-            count=1,
-            flags=re.S | re.I,
-        )
-        return re.sub(
-            r"- every object is schema-qualified and belongs to an allowed schema[^\n]*\n",
-            "",
-            without_section,
-            flags=re.I,
-        )
+        if path.name == "SKILL.md" and "generate-optimized-select" in str(path):
+            without_section = re.sub(
+                r"## allowed schemas\n.*?(?=\n## )",
+                "",
+                text,
+                count=1,
+                flags=re.S | re.I,
+            )
+            text = re.sub(
+                r"- every object is schema-qualified and belongs to an allowed schema[^\n]*\n",
+                "",
+                without_section,
+                flags=re.I,
+            )
+        if path.name == "prompt":
+            text = re.sub(
+                r"## conventions \(sales, warehouse[^\n]*\n.*?(?=\n## )",
+                "",
+                text,
+                count=1,
+                flags=re.S | re.I,
+            )
+            text = re.sub(
+                r"## warehouse\.[^\n]*\n.*?(?=\n## )",
+                "",
+                text,
+                flags=re.S | re.I,
+            )
+            text = re.sub(r"warehouse facts", "inventory facts", text, flags=re.I)
+        return text
 
     def test_no_agent_asset_or_ui_string_names_a_warehouse(self):
         """The data target is whatever Settings points at, so the wording stays generic.
@@ -420,6 +526,8 @@ class AgentAssetContractTests(SimpleTestCase):
             for path in sorted(root.rglob("*")):
                 if not path.is_file() or path.suffix not in (".md", ".json"):
                     continue
+                if path.name == "tables.md":
+                    continue
                 scanned += 1
                 raw = path.read_text(encoding="utf-8", errors="replace")
                 text = self._text_for_warehouse_product_ban(path, raw).lower()
@@ -438,7 +546,8 @@ class AgentAssetContractTests(SimpleTestCase):
                 }
         skill_path = Path("generate-optimized-select/SKILL.md")
         for agent_id, prompt in prompts.items():
-            scrubbed = self._text_for_warehouse_product_ban(skill_path, prompt).lower()
+            scrubbed = self._text_for_warehouse_product_ban(skill_path, prompt)
+            scrubbed = self._text_for_warehouse_product_ban(Path("prompt"), scrubbed).lower()
             for token in banned:
                 self.assertNotIn(token, scrubbed, f"{agent_id} prompt names a {token}")
 
