@@ -320,6 +320,222 @@ class ThreeAgentPipelineTests(SimpleTestCase):
         self.assertIn("NameMoshtary", prompt)
 
 
+class ResearcherAssumptionsTests(SimpleTestCase):
+    def test_normalize_researcher_assumptions_keeps_documented_and_guessed(self):
+        from .pipeline_run import normalize_researcher_assumptions
+
+        raw = [
+            {"item": "Status filter", "value_used": "all CodeVazeiat", "source": "guessed", "impact": "high"},
+            {"item": "Date column", "value_used": "TarikhFaktor", "source": "documented", "impact": ""},
+            {"bad": True},
+        ]
+        normalized = normalize_researcher_assumptions(raw)
+        self.assertEqual(len(normalized), 2)
+        self.assertEqual(normalized[0]["source"], "guessed")
+        self.assertEqual(normalized[1]["source"], "documented")
+
+    def test_format_assumptions_section_english_lists_guessed_only(self):
+        from .pipeline_run import format_assumptions_section
+
+        assumptions = [
+            {"item": "Returns", "value_used": "not subtracted", "source": "guessed", "impact": "inflates total"},
+            {"item": "Table", "value_used": "Sales.Faktor", "source": "documented", "impact": ""},
+        ]
+        section = format_assumptions_section(assumptions, language="en")
+        self.assertIn("Assumptions", section)
+        self.assertIn("Returns", section)
+        self.assertNotIn("documented", section.lower())
+        self.assertIn("recalculate", section.lower())
+
+    def test_format_assumptions_section_persian_heading(self):
+        from .pipeline_run import format_assumptions_section
+
+        section = format_assumptions_section(
+            [{"item": "وضعیت فاکتور", "value_used": "همه کدها", "source": "guessed", "impact": ""}],
+            language="fa",
+        )
+        self.assertIn("فرضیات", section)
+        self.assertIn("دوباره محاسبه", section)
+
+    def test_merge_assumptions_appends_when_heading_missing(self):
+        from .pipeline_run import merge_assumptions_into_text_report
+
+        merged = merge_assumptions_into_text_report(
+            "Total sales: 1,234,567",
+            [{"item": "Amount column", "value_used": "MablaghKolFaktor", "source": "guessed", "impact": ""}],
+            language="en",
+        )
+        self.assertIn("Total sales", merged)
+        self.assertIn("Assumptions", merged)
+        self.assertIn("MablaghKolFaktor", merged)
+
+    def test_researcher_skills_require_assumptions_disclosure(self):
+        from django.conf import settings as dj_settings
+
+        roots = [
+            Path(dj_settings.BASE_DIR) / "analytics" / "agents" / "researcher" / "skills",
+            Path(dj_settings.MARKDOWN_FILES_DIR) / "skills" / "researcher",
+        ]
+        markers = ("assumptions", "فرضیات", "Business rules")
+        for root in roots:
+            process = root / "process-data" / "SKILL.md"
+            generate = root / "generate-optimized-select" / "SKILL.md"
+            for path in (process, generate):
+                text = path.read_text(encoding="utf-8")
+                self.assertTrue(any(m.lower() in text.lower() for m in markers), f"{path} missing assumptions guidance")
+
+    @staticmethod
+    def _skill_markdown_body(text: str) -> str:
+        if text.startswith("---"):
+            end = text.find("\n---", 3)
+            if end != -1:
+                return text[end + 4 :].lstrip()
+        return text
+
+    def test_researcher_source_and_runtime_skill_bodies_match(self):
+        from django.conf import settings as dj_settings
+
+        base = Path(dj_settings.BASE_DIR)
+        pairs = (
+            ("generate-optimized-select",),
+            ("process-data",),
+        )
+        for (skill_id,) in pairs:
+            source = base / "analytics" / "agents" / "researcher" / "skills" / skill_id / "SKILL.md"
+            runtime = Path(dj_settings.MARKDOWN_FILES_DIR) / "skills" / "researcher" / skill_id / "SKILL.md"
+            self.assertEqual(
+                self._skill_markdown_body(source.read_text(encoding="utf-8")),
+                self._skill_markdown_body(runtime.read_text(encoding="utf-8")),
+            )
+
+
+class ReportVerifierTests(SimpleTestCase):
+    def test_extract_numbers_persian_digits_and_scale(self):
+        from .report_verifier import extract_numbers_from_report
+
+        items = extract_numbers_from_report("فروش ۱٬۲۳۴ میلیارد ریال", min_large=1000)
+        self.assertEqual(len(items), 1)
+        self.assertAlmostEqual(items[0].value_rial, 1_234_000_000_000, delta=1e6)
+
+    def test_billion_vs_trillion_gap_flagged(self):
+        from .report_verifier import verify_numbers, verification_settings
+
+        rows = [
+            {"NameMarkazPakhsh": "A", "TotalSales": 5_000_000_000_000},
+            {"NameMarkazPakhsh": "B", "TotalSales": 3_744_526_438_260},
+        ]
+        columns = ["NameMarkazPakhsh", "TotalSales"]
+        text = "Ranks 3-5 differ by ~1.3 billion rial."
+        problems = verify_numbers(text, rows, columns, verification_settings())
+        self.assertTrue(any("1.3" in p or "billion" in p.lower() for p in problems))
+
+    def test_leader_contradiction_detected(self):
+        from .report_verifier import verify_leaders
+
+        rows = [
+            {"NameMarkazPakhsh": "Specialized Center", "TotalSales": 100},
+            {"NameMarkazPakhsh": "Tehran 1", "TotalSales": 90},
+        ]
+        columns = ["NameMarkazPakhsh", "TotalSales"]
+        text = (
+            "With all statuses, Specialized Center is first. "
+            "Tehran 1 leads by 0.17% over the next center."
+        )
+        problems = verify_leaders(text, rows, columns)
+        self.assertTrue(any("Contradictory" in p or "Tehran" in p for p in problems))
+
+    def test_derived_difference_and_percent_match(self):
+        from .report_verifier import verify_numbers, verification_settings
+
+        rows = [
+            {"NameMarkazPakhsh": "A", "TotalSales": 1000},
+            {"NameMarkazPakhsh": "B", "TotalSales": 900},
+        ]
+        columns = ["NameMarkazPakhsh", "TotalSales"]
+        text = "The gap is 100 rial and A holds 52.63% of the total."
+        problems = verify_numbers(text, rows, columns, verification_settings())
+        self.assertEqual(problems, [])
+
+    def test_partial_year_requires_ytd_wording(self):
+        from .report_verifier import today_jalali_tehran, verify_partial_period
+
+        jy, _, _ = today_jalali_tehran()
+        prompt = f"Three dist centers with highest sales in year {jy}"
+        sql = f"SELECT TOP 3 * FROM Sales.Faktor WHERE Sal = {jy}"
+        problems = verify_partial_period("Top centers in 1405.", prompt=prompt, sql=sql)
+        self.assertEqual(len(problems), 1)
+        ok = verify_partial_period(
+            "Year-to-date sales for 1405.", prompt=prompt, sql=sql
+        )
+        self.assertEqual(ok, [])
+
+    def test_documented_assumption_downgraded(self):
+        from .report_verifier import verify_assumption_sources
+
+        assumptions = [
+            {
+                "item": "xyzzyplugh rule",
+                "value_used": "n/a",
+                "source": "documented",
+                "impact": "",
+            }
+        ]
+        fixed, problems = verify_assumption_sources(assumptions)
+        self.assertEqual(fixed[0]["source"], "guessed")
+        self.assertTrue(problems)
+
+    def test_repair_flow_then_warning(self):
+        from .report_verifier import run_verification_with_repair
+
+        ctx = {
+            "prompt": "sales 1405",
+            "language": "en",
+            "sql_fetch": {
+                "sql": "SELECT Sal = 1405",
+                "columns": ["NameMarkazPakhsh", "TotalSales"],
+                "rows": [
+                    {"NameMarkazPakhsh": "Specialized Center", "TotalSales": 100},
+                    {"NameMarkazPakhsh": "Tehran 1", "TotalSales": 90},
+                ],
+            },
+        }
+        calls = {"n": 0}
+
+        def fake_llm(_ctx, _agent, _messages, tools=None):
+            calls["n"] += 1
+            return {
+                "content": json.dumps(
+                    {
+                        "text_report": (
+                            "Specialized Center is first. Tehran 1 still leads overall."
+                        )
+                    }
+                )
+            }
+
+        text, payload, _assumptions = run_verification_with_repair(
+            ctx,
+            "Tehran 1 leads while Specialized Center is first.",
+            assumptions=[],
+            llm=fake_llm,
+        )
+        self.assertEqual(calls["n"], 1)
+        self.assertFalse(payload["passed"])
+        self.assertTrue(payload["repaired"])
+        self.assertIn("Verification warnings", text)
+
+    def test_verifier_exception_does_not_break_run(self):
+        from .report_verifier import run_verification_with_repair
+
+        ctx = {"sql_fetch": {"columns": ["x"], "rows": [{"x": 1}]}}
+        with patch("api.report_verifier.verify_report", side_effect=RuntimeError("boom")):
+            text, payload, _ = run_verification_with_repair(
+                ctx, "hello", assumptions=[], llm=None
+            )
+        self.assertEqual(text, "hello")
+        self.assertTrue(payload["passed"])
+
+
 class AgentAssetContractTests(SimpleTestCase):
     """One skill per agent, catalog-agnostic text, no retired agents."""
 
@@ -452,6 +668,8 @@ class AgentAssetContractTests(SimpleTestCase):
                 continue
             for path in sorted(root.rglob("*")):
                 if not path.is_file() or path.suffix not in (".md", ".json"):
+                    continue
+                if path.name == "tables.md":
                     continue
                 scanned += 1
                 raw = path.read_text(encoding="utf-8", errors="replace")

@@ -73,7 +73,8 @@ _VALIDATE_SYSTEM = (
     "You are orchester. Check the researcher's result against the goals.\n"
     'Reply with JSON only: {"result":"pass|fail","gaps":["..."],"message":"short status"}\n'
     "pass: what_was_done fulfils the goals and text_report uses only numbers from the sql_fetch "
-    "preview.\n"
+    "preview; any guessed business rule that affects the numbers is listed in Assumptions "
+    "(English) or فرضیات (Persian), not hidden in the headline figure.\n"
     "fail: list the specific gaps."
 )
 
@@ -615,7 +616,11 @@ _RESEARCHER_TASK = (
     "If only the operator can settle an ambiguity, reply with result needs_input and one question.\n"
     "Reply with JSON only when you are finished: "
     '{"result":"done|fail|needs_input","what_was_done":"...","text_report":"...",'
+    '"assumptions":[{"item":"...","value_used":"...","source":"documented|guessed","impact":"..."}],'
     '"chart_type":"bar|line|pie|","message":"short status","question":"asked only when needs_input"}\n'
+    "assumptions: one entry per business rule that affects the answer; source documented only when "
+    "tables.md/RAG states it, otherwise guessed. Only guessed items belong in the Assumptions/"
+    "فرضیات section of text_report.\n"
     "Do not return result done until execute_select has succeeded and text_report uses only "
     "numbers from the sql_fetch preview.\n"
 )
@@ -629,14 +634,32 @@ def _researcher_complete(
     inbox_status: str,
 ) -> PipelineState:
     from . import sql_memory
+    from .pipeline_run import (
+        _result_language,
+        merge_assumptions_into_text_report,
+        normalize_researcher_assumptions,
+    )
+    from .report_verifier import run_verification_with_repair
 
     fetch = ctx.get("sql_fetch") if isinstance(ctx.get("sql_fetch"), dict) else None
     rows = (fetch or {}).get("rows") or []
     status_message = str(parsed.get("message") or "").strip()
-    text_report = str(parsed.get("text_report") or "").strip()
+    language = _result_language(ctx)
+    assumptions = normalize_researcher_assumptions(parsed.get("assumptions"))
+    text_report = merge_assumptions_into_text_report(
+        str(parsed.get("text_report") or "").strip(),
+        assumptions,
+        language=language,
+    )
     what_was_done = (
         str(parsed.get("what_was_done") or "").strip()
         or (f"Processed {len(rows)} preview rows" if rows else "Partial research")
+    )
+    text_report, verification, assumptions = run_verification_with_repair(
+        ctx,
+        text_report,
+        assumptions=assumptions,
+        llm=_llm if rows else None,
     )
     chart_type = str(parsed.get("chart_type") or "").strip()
     if chart_type:
@@ -647,21 +670,41 @@ def _researcher_complete(
             sql_memory.save_example(str(ctx.get("prompt") or "").strip(), sql_text)
     ctx["what_was_done"] = what_was_done
     ctx["text_report"] = text_report
+    ctx["verification"] = verification
+    if assumptions:
+        ctx["assumptions"] = assumptions
     ctx.setdefault("artifacts", {})["researcher"] = {
         "message": status_message,
         "text": text_report,
+        "assumptions": assumptions or None,
+        "verification": verification,
     }
     ok = status_message or _ui(
         ctx,
         "Research complete" if inbox_status == "done" else "Partial research",
         "تحقیق کامل شد" if inbox_status == "done" else "تحقیق جزئی",
     )
+    payload_keys = ["sql_fetch", "text_report", "what_was_done", "verification"]
+    if assumptions:
+        payload_keys.append("assumptions")
+    ver_msg = (
+        "Report verification passed"
+        if verification.get("passed")
+        else f"Report verification: {len(verification.get('problems') or [])} issue(s)"
+    )
+    _emit(
+        state,
+        agent_id="researcher",
+        status="verification",
+        message=ver_msg,
+        detail={"verification": verification},
+    )
     _tell_orchester(
         ctx,
         sender="researcher",
         status=inbox_status,
         message=ok,
-        payload_keys=["sql_fetch", "text_report", "what_was_done"],
+        payload_keys=payload_keys,
     )
     _emit(
         state,

@@ -82,6 +82,10 @@ researcher:
   max_queries: 6
   warn_at_turn: 20
   extension_turns: 3
+  verification:
+    enabled: true
+    tolerance_pct: 1.0
+    min_large_number: 10000
 
 sql:
   max_retries: 3
