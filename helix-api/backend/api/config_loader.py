@@ -239,6 +239,13 @@ DEFAULT_SQL = {
     "blocked_tables": [],
 }
 
+DEFAULT_RESEARCHER = {
+    "max_turns": 25,
+    "max_queries": 6,
+    "warn_at_turn": 20,
+    "extension_turns": 3,
+}
+
 
 def _migrate_agent_model_map(agents: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
@@ -1433,6 +1440,22 @@ def agent_company_label(agent_id: str) -> str:
     names = get_agent_display_names()
     role = names.get(definition_id, meta.get("name") or definition_id)
     return str(role or agent_id).strip()
+
+
+def get_researcher_settings() -> dict[str, Any]:
+    data = load_config()
+    raw = data.get("researcher")
+    if not isinstance(raw, dict):
+        raw = {}
+    merged = {**DEFAULT_RESEARCHER, **raw}
+    for key in ("max_turns", "max_queries", "warn_at_turn", "extension_turns"):
+        try:
+            merged[key] = max(1, int(merged.get(key) or DEFAULT_RESEARCHER[key]))
+        except (TypeError, ValueError):
+            merged[key] = DEFAULT_RESEARCHER[key]
+    if merged["warn_at_turn"] > merged["max_turns"]:
+        merged["warn_at_turn"] = merged["max_turns"]
+    return merged
 
 
 def get_sql_settings() -> dict[str, Any]:

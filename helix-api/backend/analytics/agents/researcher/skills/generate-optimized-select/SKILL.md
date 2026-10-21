@@ -20,6 +20,7 @@ Output: rows in `sql_fetch` via `execute_select`, then `what_was_done` and `text
 
 ## Procedure
 
+0. Answer with one main `execute_select` first. Open other tables only if that query fails or clearly cannot answer the goals. Do not explore side topics the operator did not ask for.
 1. Parse the ask. Name the grain (what one output row means), the measure (what is counted or summed), the period, and the filter. If any of these is missing and cannot be inferred from the catalog, return `result` fail naming the missing piece. Do not guess wide.
 2. Introspect before writing. Call `describe_table` on each candidate `schema.table`. Read the table Overview in the knowledge notes. When status codes, flags, or date storage is unclear, call `sample_rows` (up to five rows). Use only objects and columns that exist.
 3. Pick the cheapest shape: the driving table, a selective filter, then lookups, then aggregate, then `TOP`/`FETCH`. Prefer a key or an explicit date range on the raw column.

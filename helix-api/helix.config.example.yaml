@@ -77,6 +77,12 @@ sandbox:
   max_verify_retries: 2
   max_rows: 10000
 
+researcher:
+  max_turns: 25
+  max_queries: 6
+  warn_at_turn: 20
+  extension_turns: 3
+
 sql:
   max_retries: 3
   require_row_limit: false # set true to require TOP / FETCH / LIMIT (unless pure aggregate)
