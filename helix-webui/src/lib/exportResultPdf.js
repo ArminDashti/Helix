@@ -155,11 +155,24 @@ export function renderSampleChartDataUrl(language = "en") {
   }
 }
 
-function cssBox(el) {
+function cssBox(el, extra = "") {
   const bw = el.borderWidthPx || 0;
-  const border =
-    bw > 0 ? `${bw}px solid ${el.color === "#111111" ? "#3d9b82" : el.color}` : "none";
-  return `padding:${el.paddingPx}px;border:${border};border-radius:${el.borderRadiusPx}px;background:${el.backgroundColor};color:${el.color};font-family:${el.fontFamily};font-size:${el.fontSizePx}px;box-sizing:border-box;`;
+  const borderColor =
+    el.borderColor && /^#[0-9a-fA-F]{6}$/.test(el.borderColor)
+      ? el.borderColor
+      : el.color === "#111111"
+        ? "#3d9b82"
+        : el.color;
+  const border = bw > 0 ? `${bw}px solid ${borderColor}` : "none";
+  const align =
+    el.textAlign && el.textAlign !== "inherit" ? `text-align:${el.textAlign};` : "";
+  return `padding:${el.paddingPx}px;border:${border};border-radius:${el.borderRadiusPx}px;background:${el.backgroundColor};color:${el.color};font-family:${el.fontFamily};font-size:${el.fontSizePx}px;box-sizing:border-box;${align}${extra}`;
+}
+
+function resolvedTitleText(prefs, prompt, labels) {
+  const override = String(prefs?.reportTitleOverride || "").trim();
+  if (override) return override;
+  return (prompt || "").trim() || labels.pdfHeading;
 }
 
 /**
@@ -187,7 +200,7 @@ export function buildPdfHtml({
   const safeReport = escapeHtml(textReport);
   const safeLogoUrl = escapeHtml(logoDataUrl);
   const safeCompanyLogoUrl = escapeHtml(companyLogoDataUrl);
-  const reportTitle = escapeHtml((prompt || "").trim() || labels.pdfHeading);
+  const reportTitle = escapeHtml(resolvedTitleText(prefs, prompt, labels));
 
   const headerEl = elementStyle(prefs, "header");
   const helixEl = elementStyle(prefs, "helixLogo");
@@ -208,7 +221,7 @@ export function buildPdfHtml({
       : "";
   const titleInline =
     headerEl.visible && titleEl.visible
-      ? `<div data-canvas-element="title" style="${cssBox(titleEl)}flex:1;text-align:center;font-weight:600;line-height:1.7;white-space:normal;" dir="${dir}"><h1 style="margin:0;font:inherit;font-size:inherit;font-weight:inherit;">${reportTitle}</h1></div>`
+      ? `<div data-canvas-element="title" style="${cssBox(titleEl, "flex:1;font-weight:600;line-height:1.7;white-space:normal;")}${titleEl.textAlign === "inherit" || !titleEl.textAlign ? "text-align:center;" : ""}" dir="${dir}"><h1 style="margin:0;font:inherit;font-size:inherit;font-weight:inherit;">${reportTitle}</h1></div>`
       : "";
 
   const headerInner = [logoImgInline, titleInline, companyLogoImgInline]
@@ -236,7 +249,7 @@ export function buildPdfHtml({
 
   const articleInline =
     textEl.visible && textReport
-      ? `<div data-canvas-element="text" style="${cssBox(textEl)}white-space:pre-wrap;line-height:1.6;margin-bottom:14px;" dir="${dir}">${safeReport}</div>`
+      ? `<div data-canvas-element="text" style="${cssBox(textEl, "white-space:pre-wrap;line-height:1.6;margin-bottom:14px;")}" dir="${dir}">${safeReport}</div>`
       : textEl.visible
         ? `<div data-canvas-element="text" style="${cssBox(textEl)}min-height:8px;margin-bottom:14px;"></div>`
         : "";
@@ -246,13 +259,17 @@ export function buildPdfHtml({
     // Grids stay LTR (original column order) regardless of report language.
     const cols = Array.isArray(grid.columns) ? grid.columns : [];
     const rows = grid.rows || [];
+    const gridBorder =
+      gridEl.borderColor && /^#[0-9a-fA-F]{6}$/.test(gridEl.borderColor)
+        ? gridEl.borderColor
+        : "#3d9b82";
     const thBorder =
       gridEl.borderWidthPx > 0
-        ? `${gridEl.borderWidthPx}px solid #1e3a5f`
+        ? `${gridEl.borderWidthPx}px solid ${gridBorder}`
         : "none";
     const tdBorder =
       gridEl.borderWidthPx > 0
-        ? `${gridEl.borderWidthPx}px solid #cfe6dd`
+        ? `${gridEl.borderWidthPx}px solid ${gridBorder}55`
         : "none";
     const headerCells = cols
       .map(
@@ -284,9 +301,17 @@ export function buildPdfHtml({
   );
   // The footer is always separated from the content by a line divider.
   const footerDividerPx = Math.max(1, footerEl.borderWidthPx || 0);
+  const footerDividerColor =
+    footerEl.borderColor && /^#[0-9a-fA-F]{6}$/.test(footerEl.borderColor)
+      ? footerEl.borderColor
+      : "#1e3a5f";
+  const footerAlign =
+    footerEl.textAlign && footerEl.textAlign !== "inherit"
+      ? footerEl.textAlign
+      : "center";
   const footerInline =
     includeFooter && footerEl.visible
-      ? `<div data-canvas-element="footer" style="${cssBox(footerEl)}margin-top:14px;border-top:${footerDividerPx}px solid #1e3a5f;text-align:center;">${footerText}</div>`
+      ? `<div data-canvas-element="footer" style="${cssBox(footerEl, `margin-top:14px;border-top:${footerDividerPx}px solid ${footerDividerColor};text-align:${footerAlign};`)}">${footerText}</div>`
       : "";
 
   const rootFont = elementStyle(prefs, "text");
@@ -396,7 +421,7 @@ export async function exportResultPdf({
 
     const A4_W = orientation === "portrait" ? 210 : 297;
     const A4_H = orientation === "portrait" ? 297 : 210;
-    const MARGIN = 12;
+    const MARGIN = Math.min(24, Math.max(8, Number(prefs.pageMarginMm) || 12));
     const FOOTER_H = footerVisible ? 10 : 0;
     const contentW = A4_W - MARGIN * 2;
     const contentH = A4_H - MARGIN - FOOTER_H - MARGIN;
@@ -432,18 +457,29 @@ export async function exportResultPdf({
         const footerStyle = elementStyle(prefs, "footer");
         const barY = A4_H - FOOTER_H;
         const textY = barY + 6.5;
-        pdf.setDrawColor(30, 58, 95);
+        const dividerRaw = footerStyle.borderColor || "#1e3a5f";
+        const divider = /^#[0-9a-fA-F]{6}$/.test(dividerRaw)
+          ? dividerRaw
+          : "#1e3a5f";
+        const r = parseInt(divider.slice(1, 3), 16);
+        const g = parseInt(divider.slice(3, 5), 16);
+        const b = parseInt(divider.slice(5, 7), 16);
+        pdf.setDrawColor(r, g, b);
         pdf.setLineWidth(
           Math.min(0.8, Math.max(0.3, (footerStyle.borderWidthPx || 0) * 0.25)),
         );
         pdf.line(MARGIN, barY, A4_W - MARGIN, barY);
         pdf.setTextColor(17, 17, 17);
         pdf.setFontSize(footerStyle.fontSizePx || 9);
-        pdf.text(exportedAt, MARGIN, textY, { align: "left" });
+        if (prefs.footerShowDate) {
+          pdf.text(exportedAt, MARGIN, textY, { align: "left" });
+        }
         pdf.text(footerLabel, A4_W / 2, textY, { align: "center" });
-        pdf.text(`${pageNum}/${totalPages}`, A4_W - MARGIN, textY, {
-          align: "right",
-        });
+        if (prefs.footerShowPageNumbers) {
+          pdf.text(`${pageNum}/${totalPages}`, A4_W - MARGIN, textY, {
+            align: "right",
+          });
+        }
       }
 
       srcY += sliceH_px;

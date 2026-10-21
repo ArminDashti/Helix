@@ -143,6 +143,10 @@ def _question(question_id: str, text: str) -> dict[str, str]:
     return {"id": question_id, "text": text}
 
 
+def _operator_questions_allowed(ctx: dict[str, Any]) -> bool:
+    return ctx.get("allow_operator_questions") is not False
+
+
 def _ask_operator(
     state: PipelineState,
     *,
@@ -156,6 +160,8 @@ def _ask_operator(
     resuming re-enters this node with ``ctx['clarifications']`` already holding the answer.
     """
     ctx = state["ctx"]
+    if not _operator_questions_allowed(ctx):
+        return
     ctx["_pending_question"] = {
         "agent_id": agent_id,
         "node": agent_id,
@@ -429,6 +435,16 @@ def _orchester_decide(
             ctx["orchester_hint"] = hint
         return sender, _ui(ctx, f"Orchester retries {sender}", f"Orchester دوباره {sender} را اجرا می‌کند")
     if action == "ask":
+        if not _operator_questions_allowed(ctx):
+            return _orchester_stop(
+                ctx,
+                message
+                or _ui(
+                    ctx,
+                    "Operator questions are disabled for this run",
+                    "پرسش از کاربر برای این اجرا غیرفعال است",
+                ),
+            )
         ctx["_orchester_resume_to"] = sender
         _ask_operator(state, agent_id="orchester", questions=[_question("q1", question)])
         return "needs_input", _ui(ctx, "Orchester asks the operator", "Orchester از کاربر می‌پرسد")
@@ -493,7 +509,7 @@ def node_orchester(state: PipelineState) -> PipelineState:
             route, msg = _orchester_stop(ctx, reason)
             return _go(state, ctx, route, msg)
         ctx["goals"] = verdict["goals"]
-        if verdict["questions"]:
+        if verdict["questions"] and _operator_questions_allowed(ctx):
             _ask_operator(
                 state,
                 agent_id="orchester",
@@ -789,10 +805,20 @@ def node_researcher(state: PipelineState) -> PipelineState:
         return _researcher_fail(state, ctx, outcome.message)
     if outcome.terminal == "needs_input":
         question = str(parsed.get("question") or "").strip()
-        if question:
+        if question and _operator_questions_allowed(ctx):
             _ask_operator(state, agent_id="researcher", questions=[_question("q1", question)])
             state["route"] = "orchester"  # type: ignore[assignment]
             return state
+        if question:
+            return _researcher_fail(
+                state,
+                ctx,
+                _ui(
+                    ctx,
+                    "Researcher needed an operator answer but questions are disabled",
+                    "پژوهشگر به پاسخ کاربر نیاز داشت اما پرسش غیرفعال است",
+                ),
+            )
     if outcome.terminal == "fail":
         return _researcher_fail(state, ctx, outcome.message or "Researcher found no answer")
     if outcome.terminal == "partial":

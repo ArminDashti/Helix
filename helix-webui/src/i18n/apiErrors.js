@@ -92,7 +92,14 @@ export function translateKnownMessage(t, text) {
   let match = HTTP_META.exec(raw);
   if (match) return t("errors.httpMeta", { status: match[1] });
   match = API_STATUS.exec(raw);
-  if (match) return t("errors.http.status", { status: match[1] });
+  if (match) {
+    const code = Number(match[1]);
+    if (code >= 500) return t("errors.http.server");
+    if (code === 404) return t("errors.http.notFound");
+    if (code === 401 || code === 403) return t("errors.http.unauthorized");
+    if (code === 400) return t("errors.http.badRequest");
+    return t("errors.generic");
+  }
   match = STAGE_INVALID.exec(raw);
   if (match) return t("pipeline.validate.stageInvalid", { n: match[1] });
   match = STAGE_NEEDS_AGENT.exec(raw);

@@ -34,14 +34,27 @@ function ContactEmail() {
   );
 }
 
-export default function AboutMePage() {
+export default function AboutMePage({ embedded = false }) {
   const { t } = useI18n();
 
   return (
-    <div className="hx-rise mx-auto flex h-full min-h-0 max-w-3xl flex-col gap-5 overflow-y-auto pb-8">
-      <PageHeader icon={User} title={t("aboutMe.title")}>
-        <p className="text-sm text-muted">{t("aboutMe.subtitle")}</p>
-      </PageHeader>
+    <div
+      className={
+        embedded
+          ? "mx-auto flex min-h-0 max-w-3xl flex-col gap-5 pb-4"
+          : "hx-rise mx-auto flex h-full min-h-0 max-w-3xl flex-col gap-5 overflow-y-auto pb-8"
+      }
+    >
+      {embedded ? (
+        <div>
+          <h2 className="font-display text-lg font-semibold text-ink">{t("aboutMe.title")}</h2>
+          <p className="mt-1 text-sm text-muted">{t("aboutMe.subtitle")}</p>
+        </div>
+      ) : (
+        <PageHeader icon={User} title={t("aboutMe.title")}>
+          <p className="text-sm text-muted">{t("aboutMe.subtitle")}</p>
+        </PageHeader>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-[160px_1fr] sm:items-start">
         <div className="overflow-hidden rounded-2xl border border-line/80 bg-fog/40">

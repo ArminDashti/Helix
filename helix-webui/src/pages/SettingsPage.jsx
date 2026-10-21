@@ -7,7 +7,6 @@ import {
 } from "react-router-dom";
 import {
   Activity,
-  BookOpen,
   Building2,
   Database,
   Download,
@@ -19,15 +18,15 @@ import {
   ScrollText,
   Settings as SettingsIcon,
   Sun,
-  User,
+  Upload,
 } from "lucide-react";
 import { version as appVersion } from "../../package.json";
-import AboutMePage from "./AboutMePage.jsx";
 import LogsPage from "./LogsPage.jsx";
 import {
   fetchAgents,
   fetchBranding,
   fetchDatabaseSettings,
+  importDatabaseFile,
   fetchLatestRelease,
   fetchOpenRouterModels,
   sendFeedback,
@@ -52,7 +51,6 @@ import { useI18n } from "../context/I18nContext.jsx";
 import { failMessage, translateKnownMessage } from "../i18n/apiErrors.js";
 import { formatDateTime } from "../i18n/format.js";
 import useFlash from "../lib/useFlash.js";
-import { assetUrl } from "../utils/assetUrl.js";
 import { compareAz, sortByLabel, sortStrings } from "../utils/sortOptions.js";
 import { agentCompanyLabel } from "../utils/agentLabel.js";
 import { useLiveSync } from "../context/LiveSyncContext.jsx";
@@ -128,31 +126,6 @@ function seedConnectorFields(prev, nextConnector, prevConnector) {
   return { ...prev, base_url: baseUrl, agents };
 }
 
-const ADMIN_GUIDE_PDF = assetUrl("docs/fa/helix-admin-guide.pdf");
-
-function AdminGuideDownloadCard({ t }) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-moss/30 bg-moss/5 p-4">
-      <div className="flex min-w-0 items-start gap-3">
-        <BookOpen className="mt-0.5 size-5 shrink-0 text-moss" aria-hidden />
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-ink">{t("guide.adminTitle")}</h2>
-          <p className="mt-1 text-sm text-muted">{t("guide.adminDescription")}</p>
-        </div>
-      </div>
-      <a
-        href={ADMIN_GUIDE_PDF}
-        download="helix-admin-guide-fa.pdf"
-        aria-label={t("guide.downloadAria")}
-        className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-moss/40 bg-paper px-4 py-2 text-sm font-medium text-moss hover:bg-moss/10"
-      >
-        <Download className="size-4" aria-hidden />
-        {t("guide.downloadPdf")}
-      </a>
-    </div>
-  );
-}
-
 const EMPTY_BRANDING = {
   company_name: "",
   company_logo_data_url: "",
@@ -198,7 +171,6 @@ function tabIcon(tabId) {
   if (tabId === "update") return Download;
   if (tabId === "feedback") return MessageSquare;
   if (tabId === "logs") return ScrollText;
-  if (tabId === "about") return User;
   return SettingsIcon;
 }
 
@@ -510,6 +482,9 @@ export default function SettingsPage() {
   const { theme, setTheme } = useOutletContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
+  if (tabParam === "about") {
+    return <Navigate to="/help?tab=about" replace />;
+  }
   const requestedTab = TAB_ALIASES[tabParam] || tabParam;
 
   const tabs = useMemo(
@@ -517,11 +492,10 @@ export default function SettingsPage() {
       { id: "general", label: t("settings.tabGeneral") },
       { id: "llm", label: t("settings.tabLlm") },
       { id: "database", label: t("settings.tabDatabase") },
-      { id: "status", label: t("settings.tabStatus") },
+      { id: "logs", label: t("nav.logs") },
       { id: "update", label: t("settings.tabUpdate") },
       { id: "feedback", label: t("settings.tabFeedback") },
-      { id: "logs", label: t("nav.logs") },
-      { id: "about", label: t("nav.aboutMe") },
+      { id: "status", label: t("settings.tabStatus") },
     ],
     [t],
   );
@@ -569,6 +543,7 @@ export default function SettingsPage() {
   const [tierBusy, setTierBusy] = useState(null);
   const [blockedTables, setBlockedTables] = useState("");
   const [blockedBusy, setBlockedBusy] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
   const { checkConnection } = useApiStatus();
 
   const activeTokenConfigured = Boolean(orForm.token_configured);
@@ -624,6 +599,32 @@ export default function SettingsPage() {
       setError(failMessage(err, t, "settings.tierDownloadFailed"));
     } finally {
       setTierBusy(null);
+    }
+  }
+
+  async function handleDataFileImport(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setError(null);
+    setStatus(null);
+    setImportBusy(true);
+    try {
+      const data = await importDatabaseFile(file);
+      setDbForm({ ...EMPTY_DB, ...data.database });
+      setConnectionString(data.connection_string || "");
+      setConnectionStringDirty(false);
+      const tables = Array.isArray(data.tables) ? data.tables : [];
+      setStatus(
+        tables.length
+          ? t("settings.dataImportSuccess", { count: tables.length, tables: tables.join(", ") })
+          : t("settings.dataImportSuccessShort"),
+      );
+      await checkConnection({ silent: true });
+    } catch (err) {
+      setError(failMessage(err, t, "settings.dataImportFailed"));
+    } finally {
+      setImportBusy(false);
     }
   }
 
@@ -1105,7 +1106,6 @@ export default function SettingsPage() {
 
       {activeSection === "general" ? (
         <div className="space-y-3">
-          <AdminGuideDownloadCard t={t} />
         <section className="space-y-3 rounded-2xl border border-line/80 bg-paper/80 p-4 backdrop-blur-sm">
           <div>
             <p className="block text-sm font-medium text-ink">{t("layout.languageAria")}</p>
@@ -1248,7 +1248,6 @@ export default function SettingsPage() {
       {activeSection === "update" ? <UpdateSection /> : null}
       {activeSection === "feedback" ? <FeedbackSection /> : null}
       {activeSection === "logs" ? <LogsPage /> : null}
-      {activeSection === "about" ? <AboutMePage /> : null}
 
       {activeSection === "llm" ? (
         <>
@@ -1395,6 +1394,22 @@ export default function SettingsPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
             {t("settings.tabDatabase")}
           </h2>
+
+          <div className="rounded-xl border border-dashed border-line bg-fog/30 p-4">
+            <p className="text-sm font-medium text-ink">{t("settings.dataImportTitle")}</p>
+            <p className="mt-1 text-xs text-muted">{t("settings.dataImportHint")}</p>
+            <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-moss px-4 py-2 text-sm font-semibold text-white hover:bg-moss-deep has-[:disabled]:opacity-60">
+              <Upload className="size-4" aria-hidden />
+              {importBusy ? t("settings.dataImportWorking") : t("settings.dataImportChoose")}
+              <input
+                type="file"
+                className="sr-only"
+                disabled={importBusy}
+                accept=".csv,.tsv,.txt,.xlsx,.xls,.json,.jsonl,.ndjson,.sqlite,.sqlite3,.db"
+                onChange={handleDataFileImport}
+              />
+            </label>
+          </div>
 
           <Field label={t("settings.dbEngine")} id="engine">
             <select

@@ -462,6 +462,34 @@ def admin_database(request: HttpRequest) -> JsonResponse:
 
 
 @csrf_exempt
+@require_http_methods(["POST"])
+def admin_database_import(request: HttpRequest) -> JsonResponse:
+    upload = request.FILES.get("file")
+    if upload is None:
+        return _error("file is required (multipart field name: file)")
+    try:
+        from .data_file_import import import_uploaded_file, sqlite_config_name
+
+        sqlite_path, tables = import_uploaded_file(upload)
+        config_name = sqlite_config_name(sqlite_path)
+        db = update_database_settings(
+            {"engine": "sqlite", "name": config_name, "path": config_name}
+        )
+    except ValueError as exc:
+        return _error(str(exc))
+    except Exception as exc:
+        return _error(str(exc), 500)
+    return JsonResponse(
+        {
+            "database": db,
+            "connection_string": database_to_connection_string(db),
+            "tables": tables,
+            "source_filename": getattr(upload, "name", "") or "",
+        }
+    )
+
+
+@csrf_exempt
 @require_http_methods(["GET", "PUT"])
 def admin_openrouter(request: HttpRequest) -> JsonResponse:
     if request.method == "GET":
@@ -1014,7 +1042,16 @@ def admin_pipeline_graph(request: HttpRequest) -> JsonResponse:
 def _parse_run_options(
     body: dict[str, Any],
 ) -> (
-    tuple[str, str, str, str | None, str | None, list[str] | None, list[str] | None]
+    tuple[
+        str,
+        str,
+        str,
+        str | None,
+        str | None,
+        list[str] | None,
+        list[str] | None,
+        bool,
+    ]
     | JsonResponse
 ):
     prompt = (body.get("prompt") or "").strip()
@@ -1027,7 +1064,19 @@ def _parse_run_options(
 
     if mode not in VALID_MODES:
         return _error(
-            "mode must be auto, chart, grid, research, analytical_report, or analytical_report_chart"
+            "mode must be auto, chart, chart_grid, grid, research, analytical_report, "
+            "or analytical_report_chart"
+        )
+    raw_allow_questions = body.get("allow_operator_questions")
+    if raw_allow_questions is None:
+        allow_operator_questions = True
+    elif isinstance(raw_allow_questions, bool):
+        allow_operator_questions = raw_allow_questions
+    else:
+        allow_operator_questions = str(raw_allow_questions).strip().lower() in (
+            "1",
+            "true",
+            "yes",
         )
     if language not in VALID_LANGUAGES:
         return _error("language must be en or fa")
@@ -1066,7 +1115,16 @@ def _parse_run_options(
             if p.strip()
         ]
 
-    return prompt, mode, language, report_type, chart_type, chart_types, columns
+    return (
+        prompt,
+        mode,
+        language,
+        report_type,
+        chart_type,
+        chart_types,
+        columns,
+        allow_operator_questions,
+    )
 
 
 def _bearer_token(request: HttpRequest) -> str:
@@ -1165,7 +1223,16 @@ def runs_stream(request: HttpRequest) -> HttpResponse:
     parsed = _parse_run_options(body)
     if isinstance(parsed, JsonResponse):
         return parsed
-    prompt, mode, language, report_type, chart_type, chart_types, columns = parsed
+    (
+        prompt,
+        mode,
+        language,
+        report_type,
+        chart_type,
+        chart_types,
+        columns,
+        allow_operator_questions,
+    ) = parsed
     actor = _resolve_actor(request, body)
 
     try:
@@ -1263,6 +1330,7 @@ def runs_stream(request: HttpRequest) -> HttpResponse:
                 chart_type=chart_type,
                 chart_types=chart_types,
                 columns=columns,
+                allow_operator_questions=allow_operator_questions,
                 actor=actor,
             ):
                 if '"event": "result"' in chunk or '"event":"result"' in chunk:
@@ -1356,7 +1424,16 @@ def chat(request: HttpRequest) -> JsonResponse:
     parsed = _parse_run_options(body)
     if isinstance(parsed, JsonResponse):
         return parsed
-    prompt, mode, language, report_type, chart_type, chart_types, columns = parsed
+    (
+        prompt,
+        mode,
+        language,
+        report_type,
+        chart_type,
+        chart_types,
+        columns,
+        allow_operator_questions,
+    ) = parsed
     actor = _resolve_actor(request, body)
     try:
         require_llm()
@@ -1380,6 +1457,7 @@ def chat(request: HttpRequest) -> JsonResponse:
             chart_type=chart_type,
             chart_types=chart_types,
             columns=columns,
+            allow_operator_questions=allow_operator_questions,
             actor=actor,
         )
     except ValueError as exc:

@@ -4,15 +4,15 @@
     "sql": "SELECT TOP (100)\n    CodeVazeiat,\n    COUNT(*) AS TedadFaktor,\n    SUM(MablaghKolFaktor) AS SumMablaghKolFaktor\nFROM Sales.DarkhastFaktor\nWHERE Sal = 1405\n  AND TarikhFaktor >= '2026-08-23'\n  AND TarikhFaktor < '2026-09-23'\nGROUP BY CodeVazeiat"
   },
   {
-    "request": "top products",
-    "sql": "SELECT TOP 1 1 AS n"
-  },
-  {
     "request": "Three dist center with highest sales in year 1405",
     "sql": "WITH c AS (SELECT df.ccMarkazPakhsh, mp.NameMarkazPakhsh, COUNT_BIG(*) AS InvoiceCount, SUM(df.MablaghKolFaktor) AS GrossRial, SUM(df.MablaghKhalesFaktor) AS NetRial, SUM(df.SumMaliat) AS TaxRial FROM Sales.DarkhastFaktor AS df LEFT JOIN Global.MarkazPakhsh AS mp ON mp.ccMarkazPakhsh = df.ccMarkazPakhsh WHERE df.Sal = 1405 AND df.CodeVazeiat IN (6,7,8) GROUP BY df.ccMarkazPakhsh, mp.NameMarkazPakhsh), t AS (SELECT SUM(GrossRial) AS TotalAll FROM c) SELECT TOP (5) c.ccMarkazPakhsh, c.NameMarkazPakhsh, c.InvoiceCount, c.GrossRial, c.NetRial, c.TaxRial, DENSE_RANK() OVER (ORDER BY c.GrossRial DESC) AS SalesRank, ROUND(100.0 * c.GrossRial / t.TotalAll, 2) AS PctOfYearTotal FROM c CROSS JOIN t ORDER BY c.GrossRial DESC"
   },
   {
     "request": "با توجه به فروش فروردین 1405 تا مهر 1405، بهم بگو فروش آبان رو چه مقدار می بینی؟ فروش کل منظورم هست",
     "sql": "SELECT TOP (5)\n  SUM(sat.MablaghForosh) AS SumMablaghForosh,\n  SUM(sat.MablaghForoshKhalesKala) AS SumMablaghForoshKhalesKala,\n  SUM(sat.MablaghTakhfifFaktor) AS SumMablaghTakhfifFaktor,\n  SUM(sat.Maliat) AS SumMaliatSatr,\n  SUM(sat.Avarez) AS SumAvarez,\n  COUNT_BIG(*) AS TedadSatr\nFROM Sales.DarkhastFaktorSatr AS sat\nINNER JOIN Sales.DarkhastFaktor AS df ON df.ccDarkhastFaktor = sat.ccDarkhastFaktor\nWHERE df.Sal = 1405 AND df.CodeVazeiat IN (6,7,8) AND df.TarikhFaktor >= '2026-09-23' AND df.TarikhFaktor < '2026-10-23'"
+  },
+  {
+    "request": "top products",
+    "sql": "SELECT TOP 1 1 AS n"
   }
 ]

@@ -11,6 +11,7 @@ VALID_MODES = frozenset(
         "analytical_report",
         "grid",
         "analytical_report_chart",
+        "chart_grid",
         "research",
         # legacy aliases
         "analysis",

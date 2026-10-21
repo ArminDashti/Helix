@@ -6,20 +6,24 @@ import {
   BookOpen,
   Database,
   LayoutTemplate,
-  LogOut,
+  PanelLeft,
+  PanelLeftClose,
   Play,
   Plug,
+  CircleHelp,
+  Activity,
   Settings,
   Shield,
   Sparkles,
+  User,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { useApiStatus } from "../context/ApiStatusContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
 import { fetchBranding } from "../api/client.js";
 import { assetUrl } from "../utils/assetUrl.js";
 const THEME_STORAGE_KEY = "helix-theme";
+const NAV_COLLAPSED_STORAGE_KEY = "helix-nav-collapsed";
 
 function isConnectedStatus(status) {
   return status === "connected" || status === "configured";
@@ -71,11 +75,19 @@ function readThemePreference() {
   return "dark";
 }
 
+function readNavCollapsed() {
+  try {
+    return localStorage.getItem(NAV_COLLAPSED_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function applyTheme(preference) {
   document.documentElement.setAttribute("data-theme", resolveTheme(preference));
 }
 
-function NavItem({ link }) {
+function NavItem({ link, collapsed }) {
   const Icon = link.icon;
   return (
     <NavLink
@@ -84,7 +96,8 @@ function NavItem({ link }) {
       title={link.label}
       className={({ isActive }) =>
         [
-          "flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition",
+          "flex items-center rounded-xl py-2 text-sm font-medium transition",
+          collapsed ? "justify-center px-2" : "gap-2 px-3",
           isActive
             ? "bg-moss text-white"
             : "border border-line/80 bg-paper/80 text-ink hover:bg-fog",
@@ -92,17 +105,17 @@ function NavItem({ link }) {
       }
     >
       <Icon className="size-4 shrink-0" aria-hidden="true" />
-      <span>{link.label}</span>
+      {collapsed ? null : <span>{link.label}</span>}
     </NavLink>
   );
 }
 
 export default function Layout() {
   const { health, checking } = useApiStatus();
-  const { user, logout, isAdmin } = useAuth();
-  const navigate = useNavigate();
+  const { user, isAdmin } = useAuth();
   const { t } = useI18n();
   const [theme, setTheme] = useState(readThemePreference);
+  const [navCollapsed, setNavCollapsed] = useState(readNavCollapsed);
   const [online, setOnline] = useState(() => navigator.onLine);
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -141,6 +154,7 @@ export default function Layout() {
 
   const footerLinks = [
     ...(isAdmin ? [{ to: "/admin", label: t("nav.admin"), icon: Shield }] : []),
+    { to: "/help", label: t("nav.help"), icon: CircleHelp },
     { to: "/settings", label: t("nav.settings"), icon: Settings },
   ];
 
@@ -152,6 +166,14 @@ export default function Layout() {
       /* ignore */
     }
   }, [theme]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(NAV_COLLAPSED_STORAGE_KEY, navCollapsed ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [navCollapsed]);
 
   useEffect(() => {
     let cancelled = false;
@@ -198,127 +220,184 @@ export default function Layout() {
         </div>
       )}
       <nav
-        className="flex w-[20%] min-w-[10rem] max-w-[14rem] shrink-0 flex-col gap-1 border-e border-line/80 bg-paper/60 px-2 py-2 sm:px-3"
+        className={[
+          "flex shrink-0 flex-col gap-1 border-e border-line/80 bg-paper/60 py-2 transition-[width] duration-200 ease-out",
+          navCollapsed
+            ? "w-[3.25rem] px-1"
+            : "w-[20%] min-w-[10rem] max-w-[14rem] px-2 sm:px-3",
+        ].join(" ")}
         aria-label={t("layout.navAria")}
+        aria-expanded={!navCollapsed}
       >
-        <div className="mb-2 flex items-center gap-2 rounded-xl border border-line/80 bg-fog/30 px-2 py-2">
+        <div
+          className={[
+            "mb-2 flex items-center rounded-xl border border-line/80 bg-fog/30",
+            navCollapsed ? "flex-col gap-1 px-1 py-2" : "gap-2 px-2 py-2",
+          ].join(" ")}
+        >
           <div
-            className="flex h-12 w-[4.75rem] shrink-0 items-center justify-center overflow-hidden"
+            className={[
+              "flex shrink-0 items-center justify-center overflow-hidden",
+              navCollapsed ? "h-8 w-8" : "h-12 w-[4.75rem]",
+            ].join(" ")}
             aria-label={t("layout.logoAria")}
             title={t("layout.logoTitle")}
           >
             <img
               src={assetUrl("helix-logo.png")}
               alt={t("layout.logoAlt")}
-              className="h-12 w-auto max-w-[4.75rem] object-contain"
+              className={[
+                "w-auto object-contain",
+                navCollapsed ? "h-8 max-w-8" : "h-12 max-w-[4.75rem]",
+              ].join(" ")}
               width={76}
               height={48}
             />
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-display text-sm font-semibold tracking-wide text-ink">
-              {t("layout.brand")}
-            </p>
-            <p className="truncate text-[11px] text-muted">{t("layout.tagline")}</p>
-          </div>
-          {branding.company_logo_data_url || branding.company_name ? (
-            <div className="flex min-w-0 max-w-[45%] shrink-0 flex-col items-end gap-0.5 border-s border-line/60 ps-2">
-              {branding.company_logo_data_url ? (
-                <img
-                  src={branding.company_logo_data_url}
-                  alt={
-                    branding.company_name || t("layout.companyLogoAlt")
-                  }
-                  title={t("layout.companyLogoTitle")}
-                  aria-label={t("layout.companyLogoAria")}
-                  className="h-8 w-auto max-w-[4.5rem] object-contain"
-                />
-              ) : null}
-              {branding.company_name ? (
-                <p className="w-full truncate text-end text-[10px] font-medium text-ink/80">
-                  {branding.company_name}
+          {navCollapsed ? null : (
+            <>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-display text-sm font-semibold tracking-wide text-ink">
+                  {t("layout.brand")}
                 </p>
+                <p className="truncate text-[11px] text-muted">{t("layout.tagline")}</p>
+              </div>
+              {branding.company_logo_data_url || branding.company_name ? (
+                <div className="flex min-w-0 max-w-[45%] shrink-0 flex-col items-end gap-0.5 border-s border-line/60 ps-2">
+                  {branding.company_logo_data_url ? (
+                    <img
+                      src={branding.company_logo_data_url}
+                      alt={
+                        branding.company_name || t("layout.companyLogoAlt")
+                      }
+                      title={t("layout.companyLogoTitle")}
+                      aria-label={t("layout.companyLogoAria")}
+                      className="h-8 w-auto max-w-[4.5rem] object-contain"
+                    />
+                  ) : null}
+                  {branding.company_name ? (
+                    <p className="w-full truncate text-end text-[10px] font-medium text-ink/80">
+                      {branding.company_name}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
-            </div>
-          ) : null}
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => setNavCollapsed((c) => !c)}
+            className={[
+              "shrink-0 rounded-lg border border-line/80 p-1.5 text-muted hover:bg-fog hover:text-ink",
+              navCollapsed ? "" : "ms-auto",
+            ].join(" ")}
+            title={
+              navCollapsed ? t("layout.expandNav") : t("layout.collapseNav")
+            }
+            aria-label={
+              navCollapsed ? t("layout.expandNav") : t("layout.collapseNav")
+            }
+          >
+            {navCollapsed ? (
+              <PanelLeft className="size-4" aria-hidden />
+            ) : (
+              <PanelLeftClose className="size-4" aria-hidden />
+            )}
+          </button>
         </div>
 
-        {navGroups.map((group) => (
-          <details key={group.labelKey} className="group" open>
-            <summary className="cursor-pointer select-none rounded-lg px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted hover:bg-fog">
-              {t(group.labelKey)}
-            </summary>
-            <div className="mt-1 flex flex-col gap-1 ps-2">
+        {navGroups.map((group) =>
+          navCollapsed ? (
+            <div key={group.labelKey} className="flex flex-col gap-1">
               {group.links.map((link) => (
-                <NavItem key={link.to} link={link} />
+                <NavItem key={link.to} link={link} collapsed={navCollapsed} />
               ))}
             </div>
-          </details>
-        ))}
+          ) : (
+            <details key={group.labelKey} className="group" open>
+              <summary
+                className="cursor-pointer select-none list-none px-2 py-2 marker:content-none [&::-webkit-details-marker]:hidden"
+                aria-label={t(group.labelKey)}
+              >
+                <div className="h-px w-full bg-line/70" aria-hidden="true" />
+              </summary>
+              <div className="mt-0.5 flex flex-col gap-1 ps-2">
+                {group.links.map((link) => (
+                  <NavItem key={link.to} link={link} collapsed={navCollapsed} />
+                ))}
+              </div>
+            </details>
+          ),
+        )}
 
         <div className="mt-auto space-y-1 pt-2">
-          {user ? (
-            <div className="mb-1 flex items-center gap-2 rounded-xl border border-line/80 bg-fog/30 px-2 py-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-semibold text-ink">{user.display_name}</p>
-                <p className="truncate text-[11px] text-muted">{user.username}</p>
-              </div>
-              <button
-                type="button"
-                title={t("auth.signOut")}
-                onClick={() => {
-                  logout();
-                  navigate("/login");
-                }}
-                className="rounded-lg border border-line p-1.5 text-muted hover:bg-fog hover:text-ink"
-              >
-                <LogOut className="size-4" aria-hidden />
-              </button>
-            </div>
-          ) : null}
           {footerLinks.map((link) => (
-            <NavItem key={link.to} link={link} />
+            <NavItem key={link.to} link={link} collapsed={navCollapsed} />
           ))}
 
-          <NavLink
-            to="/settings?tab=status"
-            title={t("layout.status.openLogsTitle")}
-            className="block w-full rounded-xl border border-line/80 bg-fog/40 px-3 py-2 text-start text-[11px] font-medium hover:bg-fog"
-            aria-label={t("layout.status.openLogsAria")}
-          >
-            <span className="grid w-full grid-cols-[auto_1fr] items-baseline gap-x-2 gap-y-1 font-geek tracking-wide">
-              <StatusLine
-                status={llmStatus}
-                label={t("layout.status.llm")}
-                checking={checking}
-                t={t}
-              />
-              <StatusLine
-                status={engineStatus}
-                label={t("layout.status.engine")}
-                checking={checking}
-                t={t}
-              />
-              <StatusLine
-                status={dbStatus}
-                label={t("layout.status.database")}
-                checking={checking}
-                t={t}
-              />
-            </span>
-          </NavLink>
-
-          <p className="rounded-xl border border-line/80 bg-fog/40 px-2 py-1.5 text-center text-sm leading-snug text-muted">
-            {t("layout.credit")}{" "}
-            <a
-              href="https://github.com/armindashti"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-2 hover:text-ink"
+          {navCollapsed ? (
+            <NavLink
+              to="/settings?tab=status"
+              title={t("layout.status.openLogsTitle")}
+              className="flex justify-center rounded-xl border border-line/80 bg-fog/40 px-2 py-2 hover:bg-fog"
+              aria-label={t("layout.status.openLogsAria")}
             >
-              {t("layout.creatorName")}
-            </a>
-          </p>
+              <Activity className="size-4 shrink-0 text-muted" aria-hidden />
+            </NavLink>
+          ) : (
+            <NavLink
+              to="/settings?tab=status"
+              title={t("layout.status.openLogsTitle")}
+              className="block w-full rounded-xl border border-line/80 bg-fog/40 px-3 py-2 text-start text-[11px] font-medium hover:bg-fog"
+              aria-label={t("layout.status.openLogsAria")}
+            >
+              <span className="grid w-full grid-cols-[auto_1fr] items-baseline gap-x-2 gap-y-1 font-geek tracking-wide">
+                <StatusLine
+                  status={llmStatus}
+                  label={t("layout.status.llm")}
+                  checking={checking}
+                  t={t}
+                />
+                <StatusLine
+                  status={engineStatus}
+                  label={t("layout.status.engine")}
+                  checking={checking}
+                  t={t}
+                />
+                <StatusLine
+                  status={dbStatus}
+                  label={t("layout.status.database")}
+                  checking={checking}
+                  t={t}
+                />
+              </span>
+            </NavLink>
+          )}
+
+          {user ? (
+            <NavItem
+              collapsed={navCollapsed}
+              link={{
+                to: "/profile",
+                label: t("nav.profile"),
+                icon: User,
+              }}
+            />
+          ) : null}
+
+          {navCollapsed ? null : (
+            <p className="rounded-xl border border-line/80 bg-fog/40 px-2 py-1.5 text-center text-sm leading-snug text-muted">
+              {t("layout.credit")}{" "}
+              <a
+                href="https://github.com/armindashti"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-ink"
+              >
+                {t("layout.creatorName")}
+              </a>
+            </p>
+          )}
         </div>
       </nav>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto p-2 sm:p-3">

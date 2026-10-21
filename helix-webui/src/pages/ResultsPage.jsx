@@ -19,6 +19,7 @@ import {
 import DataGrid from "../components/DataGrid.jsx";
 import IconButton from "../components/IconButton.jsx";
 import PageHeader from "../components/PageHeader.jsx";
+import ResultShareMenu from "../components/ResultShareMenu.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
 import { useLiveSync } from "../context/LiveSyncContext.jsx";
 import { failMessage } from "../i18n/apiErrors.js";
@@ -240,6 +241,17 @@ function ResultsList() {
         ),
       },
       {
+        key: "share",
+        label: t("results.colShare"),
+        render: (item) => (
+          <ResultShareMenu
+            resultId={item.id}
+            prompt={item.prompt}
+            compact
+          />
+        ),
+      },
+      {
         key: "delete",
         label: t("results.colDelete"),
         render: (item) => (
@@ -426,6 +438,11 @@ function ResultDetail({ resultId }) {
                 {t("results.exportPdf")}
               </IconButton>
             ) : null}
+            <ResultShareMenu
+              resultId={resultId}
+              prompt={editedPrompt}
+              textReport={editedReport}
+            />
             <Link
               to="/results"
               className="inline-flex items-center gap-2 rounded-xl border border-line bg-paper px-4 py-2 text-sm font-medium text-ink hover:bg-fog"
@@ -551,13 +568,13 @@ function ResultDetail({ resultId }) {
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
               {t("results.sectionGrid")}
             </h2>
-            <table className="w-full min-w-[20rem] border-collapse font-sans text-sm">
+            <table className="w-full min-w-[20rem] border-collapse text-center font-sans text-sm">
               <thead>
                 <tr>
                   {gridColumns.map((col) => (
                     <th
                       key={col}
-                      className="border border-line bg-fog/50 px-3 py-2 text-start font-semibold text-ink"
+                      className="border border-line bg-fog/50 px-3 py-2 text-center align-middle font-semibold text-ink"
                     >
                       {col}
                     </th>
@@ -570,7 +587,7 @@ function ResultDetail({ resultId }) {
                     {gridColumns.map((col) => (
                       <td
                         key={col}
-                        className="border border-line px-3 py-1.5 text-ink"
+                        className="border border-line px-3 py-1.5 text-center align-middle text-ink"
                       >
                         {row?.[col] ?? ""}
                       </td>

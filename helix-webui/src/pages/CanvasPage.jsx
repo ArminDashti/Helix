@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FileDown, LayoutTemplate } from "lucide-react";
+import { ClipboardCopy, FileDown, LayoutTemplate, Upload } from "lucide-react";
 import PageHeader from "../components/PageHeader.jsx";
 import IconButton from "../components/IconButton.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
@@ -14,7 +14,9 @@ import {
   DEFAULT_PDF_DESIGN,
   FONT_OPTIONS,
   PDF_ELEMENT_IDS,
+  designForExport,
   loadPdfDesign,
+  normalizePdfDesign,
   savePdfDesign,
 } from "../lib/pdfDesign.js";
 
@@ -52,6 +54,8 @@ const ELEMENT_LABEL_KEYS = {
 const inputClass =
   "mt-1 w-full rounded-xl border border-line bg-fog/40 px-3 py-2 text-sm outline-none focus:border-moss focus:ring-2 focus:ring-moss/30";
 
+const TEXT_ALIGN_ELEMENTS = new Set(["title", "text", "footer"]);
+
 export default function CanvasPage() {
   const { t, locale } = useI18n();
   const [design, setDesign] = useState(() => loadPdfDesign());
@@ -59,6 +63,7 @@ export default function CanvasPage() {
   const [previewHtml, setPreviewHtml] = useState("");
   const [saving, setSaving] = useState(false);
   const [logoError, setLogoError] = useState(null);
+  const [designNotice, setDesignNotice] = useState(null);
 
   const pdfLabels = useMemo(
     () => ({
@@ -75,6 +80,10 @@ export default function CanvasPage() {
 
   const samplePrompt = t("canvas.samplePrompt");
   const sampleReport = t("canvas.sampleReport");
+  const previewPrompt = useMemo(
+    () => (design.reportTitleOverride || "").trim() || samplePrompt,
+    [design.reportTitleOverride, samplePrompt],
+  );
   const sampleGrid = locale === "fa" ? SAMPLE_GRID_FA : SAMPLE_GRID;
   const footerFallback = pdfLabels.pdfFooter;
 
@@ -131,7 +140,7 @@ export default function CanvasPage() {
         locale === "fa" ? "fa" : "en",
       );
       const { html } = buildPdfHtml({
-        prompt: samplePrompt,
+        prompt: previewPrompt,
         textReport: sampleReport,
         grid: sampleGrid,
         chartImages: sampleChart ? [sampleChart] : [],
@@ -151,7 +160,7 @@ export default function CanvasPage() {
   }, [
     design,
     locale,
-    samplePrompt,
+    previewPrompt,
     sampleReport,
     sampleGrid,
     pdfLabels,
@@ -224,7 +233,7 @@ export default function CanvasPage() {
         locale === "fa" ? "fa" : "en",
       );
       await exportResultPdf({
-        prompt: samplePrompt,
+        prompt: previewPrompt,
         textReport: sampleReport,
         grid: sampleGrid,
         chartImages: sampleChart ? [sampleChart] : [],
@@ -251,11 +260,45 @@ export default function CanvasPage() {
     setDesign(loadPdfDesign());
     setSelectedElement("header");
     setLogoError(null);
+    setDesignNotice(null);
+  }
+
+  async function handleCopyDesign() {
+    setDesignNotice(null);
+    try {
+      const json = JSON.stringify(designForExport(design), null, 2);
+      await navigator.clipboard.writeText(json);
+      setDesignNotice(t("canvas.designCopied"));
+    } catch {
+      setDesignNotice(t("canvas.designCopyFailed"));
+    }
+  }
+
+  function handleImportDesignFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    setDesignNotice(null);
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      try {
+        const raw = JSON.parse(String(reader.result || "{}"));
+        const next = normalizePdfDesign(raw);
+        persistDesign(next);
+        setDesignNotice(t("canvas.designImported"));
+      } catch {
+        setDesignNotice(t("canvas.designImportInvalid"));
+      }
+    };
+    reader.onerror = () => setDesignNotice(t("canvas.designImportInvalid"));
+    reader.readAsText(file);
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
-      <PageHeader icon={LayoutTemplate} title={t("canvas.title")} />
+      <PageHeader icon={LayoutTemplate} title={t("canvas.title")}>
+        <p className="mt-1 text-sm text-muted">{t("canvas.subtitle")}</p>
+      </PageHeader>
 
       <div className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[minmax(16rem,22rem)_1fr]">
         <aside
@@ -306,6 +349,28 @@ export default function CanvasPage() {
               <option value="hide">{t("canvas.hidden")}</option>
             </select>
           </div>
+
+          {selectedElement === "title" ? (
+            <div>
+              <label
+                htmlFor="canvas_title_override"
+                className="block text-sm font-medium text-ink"
+              >
+                {t("canvas.reportTitleOverride")}
+              </label>
+              <input
+                id="canvas_title_override"
+                type="text"
+                value={design.reportTitleOverride ?? ""}
+                placeholder={samplePrompt}
+                onChange={(e) =>
+                  updateTopLevel("reportTitleOverride", e.target.value)
+                }
+                className={inputClass}
+              />
+              <p className="mt-1 text-xs text-muted">{t("canvas.reportTitleHint")}</p>
+            </div>
+          ) : null}
 
           {selectedElement === "footer" ? (
             <div>
@@ -380,6 +445,50 @@ export default function CanvasPage() {
               className="mt-1 h-10 w-full cursor-pointer rounded-xl border border-line bg-fog/40"
             />
           </div>
+
+          <div>
+            <label htmlFor="el_border_color" className="block text-sm font-medium text-ink">
+              {t("canvas.borderColor")}
+            </label>
+            <input
+              id="el_border_color"
+              type="color"
+              value={
+                /^#[0-9a-fA-F]{6}$/.test(activeEl.borderColor || "")
+                  ? activeEl.borderColor
+                  : "#3d9b82"
+              }
+              onChange={(e) => updateElementField("borderColor", e.target.value)}
+              className="mt-1 h-10 w-full cursor-pointer rounded-xl border border-line bg-fog/40"
+            />
+          </div>
+
+          {TEXT_ALIGN_ELEMENTS.has(selectedElement) ? (
+            <div>
+              <label
+                htmlFor="el_text_align"
+                className="block text-sm font-medium text-ink"
+              >
+                {t("canvas.textAlign")}
+              </label>
+              <select
+                id="el_text_align"
+                value={
+                  activeEl.textAlign && activeEl.textAlign !== "inherit"
+                    ? activeEl.textAlign
+                    : selectedElement === "title"
+                      ? "center"
+                      : "left"
+                }
+                onChange={(e) => updateElementField("textAlign", e.target.value)}
+                className={inputClass}
+              >
+                <option value="left">{t("canvas.alignLeft")}</option>
+                <option value="center">{t("canvas.alignCenter")}</option>
+                <option value="right">{t("canvas.alignRight")}</option>
+              </select>
+            </div>
+          ) : null}
 
           <div>
             <label htmlFor="el_bg" className="block text-sm font-medium text-ink">
@@ -504,6 +613,49 @@ export default function CanvasPage() {
           </div>
 
           <div>
+            <label htmlFor="pdf_margin" className="block text-sm font-medium text-ink">
+              {t("canvas.pageMarginMm")}
+            </label>
+            <input
+              id="pdf_margin"
+              type="number"
+              min={8}
+              max={24}
+              value={design.pageMarginMm ?? 12}
+              onChange={(e) =>
+                updateTopLevel("pageMarginMm", Number(e.target.value))
+              }
+              className={inputClass}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-ink">{t("canvas.pdfFooterExtras")}</p>
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={design.footerShowDate !== false}
+                onChange={(e) =>
+                  updateTopLevel("footerShowDate", e.target.checked)
+                }
+                className="size-4 rounded border-line text-moss focus:ring-moss"
+              />
+              {t("canvas.footerShowDate")}
+            </label>
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={design.footerShowPageNumbers !== false}
+                onChange={(e) =>
+                  updateTopLevel("footerShowPageNumbers", e.target.checked)
+                }
+                className="size-4 rounded border-line text-moss focus:ring-moss"
+              />
+              {t("canvas.footerShowPageNumbers")}
+            </label>
+          </div>
+
+          <div>
             <label
               htmlFor="pdf_company_logo"
               className="block text-sm font-medium text-ink"
@@ -541,6 +693,26 @@ export default function CanvasPage() {
             >
               {t("canvas.exportSample")}
             </IconButton>
+            <IconButton
+              type="button"
+              icon={ClipboardCopy}
+              onClick={handleCopyDesign}
+              className="rounded-xl border border-line bg-fog px-4 py-2 text-sm font-medium text-ink hover:bg-fog/80"
+            >
+              {t("canvas.copyDesign")}
+            </IconButton>
+            <label
+              className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-line bg-fog px-4 py-2 text-sm font-medium text-ink hover:bg-fog/80"
+            >
+              <Upload className="size-4 shrink-0" aria-hidden="true" />
+              {t("canvas.importDesign")}
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="sr-only"
+                onChange={handleImportDesignFile}
+              />
+            </label>
             <button
               type="button"
               onClick={handleReset}
@@ -549,6 +721,9 @@ export default function CanvasPage() {
               {t("canvas.reset")}
             </button>
           </div>
+          {designNotice ? (
+            <p className="text-xs text-moss" role="status">{designNotice}</p>
+          ) : null}
         </aside>
 
         <div className="min-h-0 overflow-auto rounded-2xl border border-line/80 bg-fog/30 p-3">

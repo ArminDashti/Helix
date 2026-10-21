@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, Pencil, Plus, Shield, Trash2 } from "lucide-react";
+import { Pencil, Plus, Shield, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
 import {
   createUser,
   deleteUser,
@@ -15,8 +16,6 @@ import { useI18n } from "../context/I18nContext.jsx";
 import { failMessage } from "../i18n/apiErrors.js";
 import { useLiveSync } from "../context/LiveSyncContext.jsx";
 import useFlash from "../lib/useFlash.js";
-import { assetUrl } from "../utils/assetUrl.js";
-
 const inputClass =
   "mt-1 w-full rounded-xl border border-line bg-fog/40 px-3 py-2 text-sm outline-none focus:border-moss focus:ring-2 focus:ring-moss/30";
 
@@ -237,15 +236,12 @@ export default function AdminPage() {
     <div className="flex h-full min-h-0 flex-col gap-2">
       <PageHeader icon={Shield} title={t("admin.title")} />
       <p className="text-sm">
-        <a
-          href={assetUrl("docs/fa/helix-admin-guide.pdf")}
-          download="helix-admin-guide-fa.pdf"
-          aria-label={t("guide.downloadAria")}
+        <Link
+          to="/help?tab=guide"
           className="inline-flex items-center gap-1.5 text-moss hover:underline"
         >
-          <Download className="size-4" aria-hidden />
           {t("admin.guideLink")}
-        </a>
+        </Link>
       </p>
       {error ? (
         <p className="rounded-xl border border-warn-border bg-warn-bg px-4 py-2 text-sm text-warn">
@@ -254,9 +250,14 @@ export default function AdminPage() {
       ) : null}
       <FlashMessage message={status} />
 
-      <section className="flex min-h-0 flex-1 flex-col gap-3 rounded-2xl border border-line/80 bg-paper/80 p-4">
-        <h2 className="font-display text-base text-ink">{t("admin.users")}</h2>
-        <form onSubmit={handleSaveUser} className="flex flex-col gap-3">
+      <form
+        onSubmit={handleSaveUser}
+        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
+      >
+        <section className="flex flex-col gap-3 rounded-2xl border border-line/80 bg-paper/80 p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
+            {t("admin.addUser")}
+          </h2>
           <div className="grid gap-3 md:grid-cols-3">
             <label className="block text-sm">
               <span className="font-medium text-ink">{t("admin.username")}</span>
@@ -300,6 +301,13 @@ export default function AdminPage() {
               />
             </label>
           </div>
+          <DataGrid columns={userColumns} rows={userRows} emptyLabel={t("admin.noUsers")} />
+        </section>
+
+        <section className="flex flex-col gap-3 rounded-2xl border border-line/80 bg-paper/80 p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
+            {t("admin.permission")}
+          </h2>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -376,9 +384,8 @@ export default function AdminPage() {
               </button>
             ) : null}
           </div>
-        </form>
-        <DataGrid columns={userColumns} rows={userRows} emptyLabel={t("admin.noUsers")} />
-      </section>
+        </section>
+      </form>
     </div>
   );
 }

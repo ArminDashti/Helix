@@ -14,7 +14,7 @@ export default function ErrorModal({ error, onDismiss }) {
   const isRejection = error.kind === "rejection";
   const title = isRejection
     ? t("errors.rejection.title")
-    : localized.title || t("errors.title");
+    : t("errors.title");
   const reasonsText =
     (error.reasons && String(error.reasons).trim()) ||
     localized.message ||
@@ -22,15 +22,11 @@ export default function ErrorModal({ error, onDismiss }) {
   const message = isRejection
     ? reasonsText
     : localized.message || t("errors.generic");
-  const detail = isRejection ? "" : localized.detail || "";
-  const meta = isRejection
-    ? ""
-    : [
-        localized.kind,
-        error.status != null ? t("errors.httpMeta", { status: error.status }) : null,
-      ]
-        .filter(Boolean)
-        .join(" · ");
+  const rawDetail = isRejection ? "" : localized.detail || "";
+  const detail =
+    rawDetail && rawDetail !== message && !/^HTTP \d+$/.test(String(rawDetail).trim())
+      ? rawDetail
+      : "";
 
   return (
     <div
@@ -55,7 +51,6 @@ export default function ErrorModal({ error, onDismiss }) {
           >
             {title}
           </h2>
-          {meta ? <p className="mt-1 text-xs text-muted">{meta}</p> : null}
         </header>
 
         <div className="space-y-2 px-4 py-3 text-sm text-ink">
@@ -69,14 +64,9 @@ export default function ErrorModal({ error, onDismiss }) {
           ) : (
             <p>{message}</p>
           )}
-          {detail && detail !== message ? (
-            <p className="rounded-lg border border-line/60 bg-fog/50 px-3 py-2 font-mono text-xs text-muted">
+          {detail ? (
+            <p className="rounded-lg border border-line/60 bg-fog/50 px-3 py-2 text-xs text-muted leading-relaxed">
               {detail}
-            </p>
-          ) : null}
-          {!isRejection && error.path ? (
-            <p className="text-xs text-muted">
-              {t("errors.path", { path: error.path })}
             </p>
           ) : null}
         </div>

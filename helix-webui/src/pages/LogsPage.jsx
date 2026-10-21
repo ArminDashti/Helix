@@ -444,16 +444,16 @@ function LogDetail({ logId }) {
             </dl>
             {steps.length > 0 ? (
               <div dir="ltr" className="mt-4 overflow-x-auto">
-                <table className="min-w-full border-collapse text-sm">
+                <table className="min-w-full border-collapse text-center text-sm">
                   <thead>
-                    <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
-                      <th className="px-2 py-2 font-semibold">
+                    <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
+                      <th className="px-2 py-2 text-center font-semibold">
                         {t("logs.colStepAgent")}
                       </th>
-                      <th className="px-2 py-2 font-semibold">
+                      <th className="px-2 py-2 text-center font-semibold">
                         {t("logs.colStepStatus")}
                       </th>
-                      <th className="px-2 py-2 font-semibold">
+                      <th className="px-2 py-2 text-center font-semibold">
                         {t("logs.colStepMessage")}
                       </th>
                     </tr>
@@ -464,13 +464,13 @@ function LogDetail({ logId }) {
                         key={`${step.node_id || step.agent_id || "step"}-${index}`}
                         className="border-b border-line/60 align-top"
                       >
-                        <td className="px-2 py-2 font-mono text-xs text-ink">
+                        <td className="px-2 py-2 text-center font-mono text-xs text-ink">
                           {step.node_id || step.agent_id || t("common.noneDash")}
                         </td>
-                        <td className="px-2 py-2">
+                        <td className="px-2 py-2 text-center">
                           <StepStatusBadge status={step.status} t={t} />
                         </td>
-                        <td className="px-2 py-2 whitespace-pre-wrap text-ink">
+                        <td className="px-2 py-2 text-center whitespace-pre-wrap text-ink">
                           {step.message || t("common.noneDash")}
                         </td>
                       </tr>

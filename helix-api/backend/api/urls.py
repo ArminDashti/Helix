@@ -33,6 +33,11 @@ urlpatterns = [
     path("mcp/delete/", views.mcp_delete, name="mcp-delete"),
     path("mcp/sqlserver/", views.mcp_sqlserver, name="mcp-sqlserver"),
     path("admin/database/", views.admin_database, name="admin-database"),
+    path(
+        "admin/database/import/",
+        views.admin_database_import,
+        name="admin-database-import",
+    ),
     path("admin/branding/", views.admin_branding, name="admin-branding"),
     path("admin/provider/", views.admin_provider, name="admin-provider"),
     path("admin/openrouter/", views.admin_openrouter, name="admin-openrouter"),

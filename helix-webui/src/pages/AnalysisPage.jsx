@@ -7,25 +7,33 @@ import {
   ChartLine,
   ChartPie,
   ChartScatter,
+  ChevronDown,
   CircleDot,
+  Globe,
   Play,
+  Search,
+  Table2,
+  Zap,
 } from "lucide-react";
 import { fetchAgents, streamRun, answerRun, createResult } from "../api/client.js";
 import ErrorModal from "../components/ErrorModal.jsx";
+import GridColumnInput from "../components/GridColumnInput.jsx";
 import IconButton from "../components/IconButton.jsx";
-import PageHeader from "../components/PageHeader.jsx";
 import RunProgressModal from "../components/RunProgressModal.jsx";
 import { useApiStatus } from "../context/ApiStatusContext.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
 import { translateKnownMessage } from "../i18n/apiErrors.js";
 import { readStoredLocale } from "../i18n/applyLocale.js";
 import { translate } from "../i18n/messages.js";
+import {
+  deriveApiMode,
+  wantsChart,
+  wantsGrid,
+} from "../utils/analysisOutputs.js";
 import { agentCompanyLabel } from "../utils/agentLabel.js";
-import { parseColumns, textDirection, textLang } from "../utils/textDirection.js";
-import { sortByLabel } from "../utils/sortOptions.js";
-
-const selectClass =
-  "w-full min-w-[8.5rem] rounded-xl border border-line bg-paper px-3 py-2.5 text-[15px] text-ink outline-none ring-moss/30 focus:border-moss focus:ring-2";
+import { textDirection, textLang } from "../utils/textDirection.js";
+const languageSelectClass =
+  "min-w-[9rem] cursor-pointer appearance-none rounded-xl border border-line bg-fog/40 py-2.5 pe-9 ps-9 text-sm font-medium text-ink outline-none ring-moss/30 transition hover:bg-fog focus:border-moss focus:ring-2";
 
 const CHART_TYPE_META = [
   { value: "bar", icon: BarChart3, labelKey: "analysis.chartBar" },
@@ -42,17 +50,7 @@ const CHART_TYPE_META = [
   },
 ];
 
-function needsType(mode) {
-  return mode === "research";
-}
-
-function needsChart(mode) {
-  return mode === "chart";
-}
-
-function needsColumns(mode) {
-  return mode === "grid";
-}
+const DEFAULT_OUTPUTS = { chart: true, grid: false, research: false };
 
 function llmUnavailableMessage(health, t) {
   if (!health) {
@@ -63,6 +61,38 @@ function llmUnavailableMessage(health, t) {
   return translateKnownMessage(t, block?.detail) || t("analysis.apiKeyMissing");
 }
 
+function segmentShellClass() {
+  return "inline-flex overflow-hidden rounded-xl border border-line bg-fog/30 p-0.5";
+}
+
+function segmentBtnClass(pressed) {
+  return [
+    "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition first:rounded-[0.65rem] last:rounded-[0.65rem]",
+    pressed
+      ? "bg-moss text-white shadow-sm"
+      : "text-muted hover:bg-fog/80 hover:text-ink",
+  ].join(" ");
+}
+
+function chartIconBtnClass(pressed, atCap) {
+  return [
+    "inline-flex size-14 items-center justify-center rounded-xl border transition",
+    pressed
+      ? "border-moss bg-moss/25 text-ink ring-1 ring-moss/40"
+      : "border-line/80 bg-fog/30 text-muted hover:border-line hover:bg-fog/60 hover:text-ink",
+    atCap ? "cursor-not-allowed opacity-50" : "",
+  ].join(" ");
+}
+
+function ToolbarDivider() {
+  return (
+    <div
+      className="hidden h-9 w-px shrink-0 bg-line/70 sm:block"
+      aria-hidden="true"
+    />
+  );
+}
+
 export default function AnalysisPage() {
   const navigate = useNavigate();
   const { health, checkConnection } = useApiStatus();
@@ -70,11 +100,12 @@ export default function AnalysisPage() {
   const [prompt, setPrompt] = useState(() =>
     translate(readStoredLocale(), "analysis.promptDefault"),
   );
-  const [mode, setMode] = useState("chart");
+  const [outputs, setOutputs] = useState(DEFAULT_OUTPUTS);
   const [outputLanguage, setOutputLanguage] = useState(locale);
-  const [reportType, setReportType] = useState("medium");
+  const [reportType, setReportType] = useState("low");
   const [chartTypesSelected, setChartTypesSelected] = useState(["bar"]);
-  const [gridColumns, setGridColumns] = useState("");
+  const [gridColumns, setGridColumns] = useState([]);
+  const [allowOperatorQuestions, setAllowOperatorQuestions] = useState(false);
   const [error, setError] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [running, setRunning] = useState(false);
@@ -90,18 +121,13 @@ export default function AnalysisPage() {
   const abortRef = useRef(null);
   const answerResolveRef = useRef(null);
 
-  const modes = useMemo(
-    () =>
-      sortByLabel(
-        [
-          { value: "chart", label: t("analysis.modeChart") },
-          { value: "grid", label: t("analysis.modeGrid") },
-          { value: "research", label: t("analysis.modeResearch") },
-        ],
-        (item) => item.label,
-        locale,
-      ),
-    [t, locale],
+  const outputToggles = useMemo(
+    () => [
+      { key: "chart", label: t("analysis.modeChart"), icon: BarChart3 },
+      { key: "grid", label: t("analysis.modeGrid"), icon: Table2 },
+      { key: "research", label: t("analysis.modeResearch"), icon: Search },
+    ],
+    [t],
   );
 
   const outputLanguages = useMemo(
@@ -112,26 +138,22 @@ export default function AnalysisPage() {
     [t],
   );
 
-  const researchLevels = useMemo(
+  const speedLevels = useMemo(
     () => [
-      { value: "low", label: t("analysis.researchLow") },
-      { value: "medium", label: t("analysis.researchMedium") },
-      { value: "high", label: t("analysis.researchHigh") },
+      { value: "low", label: t("analysis.speedFast"), icon: Zap },
+      { value: "medium", label: t("analysis.speedNormal"), icon: null },
+      { value: "high", label: t("analysis.speedLong"), icon: null },
     ],
     [t],
   );
 
   const chartTypes = useMemo(
     () =>
-      sortByLabel(
-        CHART_TYPE_META.map((item) => ({
-          ...item,
-          label: t(item.labelKey),
-        })),
-        (item) => item.label,
-        locale,
-      ),
-    [t, locale],
+      CHART_TYPE_META.map((item) => ({
+        ...item,
+        label: t(item.labelKey),
+      })),
+    [t],
   );
 
   useEffect(() => {
@@ -160,11 +182,20 @@ export default function AnalysisPage() {
     };
   }, []);
 
+  function toggleOutput(key) {
+    setOutputs((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
   async function handleRun(event) {
     event.preventDefault();
     const trimmed = prompt.trim();
     if (!trimmed) {
       setError(t("analysis.promptRequired"));
+      return;
+    }
+    const apiMode = deriveApiMode(outputs);
+    if (!apiMode) {
+      setError(t("analysis.outputRequired"));
       return;
     }
     const latest = (await checkConnection({ silent: true })) || health;
@@ -179,35 +210,37 @@ export default function AnalysisPage() {
     setRunError(null);
     setRunMessages([]);
     setRunTokenUsage(null);
+
+    const includeChart = wantsChart(outputs);
+    const includeGrid = wantsGrid(outputs);
+    const selectedCharts = includeChart ? chartTypesSelected.slice(0, 4) : undefined;
+
+    if (includeChart && (!selectedCharts || selectedCharts.length === 0)) {
+      setError(t("analysis.chartRequired"));
+      return;
+    }
+
     setRunMeta({
-      mode,
+      mode: apiMode,
       language: outputLanguage,
-      report_type: needsType(mode) ? reportType : undefined,
-      chart_type: needsChart(mode) ? chartTypesSelected[0] : undefined,
-      chart_types: needsChart(mode) ? chartTypesSelected.slice(0, 4) : undefined,
+      report_type: reportType,
+      chart_type: includeChart ? selectedCharts[0] : undefined,
+      chart_types: includeChart ? selectedCharts : undefined,
     });
     setRunStartedAt(Date.now());
     setActivePrompt(trimmed);
     setModalOpen(true);
     setRunning(true);
 
-    const selectedCharts = needsChart(mode)
-      ? chartTypesSelected.slice(0, 4)
-      : undefined;
-    if (needsChart(mode) && (!selectedCharts || selectedCharts.length === 0)) {
-      setError(t("analysis.chartRequired"));
-      setRunning(false);
-      setModalOpen(false);
-      return;
-    }
     const payload = {
       prompt: trimmed,
-      mode,
+      mode: apiMode,
       language: outputLanguage,
-      report_type: needsType(mode) ? reportType : undefined,
+      report_type: reportType,
       chart_type: selectedCharts?.[0],
       chart_types: selectedCharts,
-      columns: needsColumns(mode) ? parseColumns(gridColumns) : undefined,
+      columns: includeGrid && gridColumns.length ? gridColumns : undefined,
+      allow_operator_questions: allowOperatorQuestions,
     };
 
     const controller = new AbortController();
@@ -217,8 +250,6 @@ export default function AnalysisPage() {
     try {
       const startedAt = performance.now();
       let streamed = await streamRun(payload, handleStreamEvent, controller.signal);
-      // A run can stop and ask questions (before it starts or mid-flight); every answer continues
-      // the same run from the point it stopped.
       while (streamed?.paused) {
         const answers = await askOperator(streamed.question);
         if (!answers) return;
@@ -238,7 +269,7 @@ export default function AnalysisPage() {
       setRunning(false);
       await createResult({
         prompt: trimmed,
-        mode,
+        mode: apiMode,
         language: outputLanguage,
         payload: final,
         duration_s: durationS,
@@ -302,7 +333,6 @@ export default function AnalysisPage() {
     }
   }
 
-  /** Show a paused run's questions in the progress modal and wait for the operator's answers. */
   function askOperator(question) {
     setPendingQuestion(question);
     return new Promise((resolve) => {
@@ -317,7 +347,6 @@ export default function AnalysisPage() {
     resolve?.(answers);
   }
 
-  /** Stop the in-flight run: abort the SSE fetch and surface a neutral stopped note. */
   function stopRun() {
     abortRef.current?.abort();
     setRunning(false);
@@ -329,7 +358,6 @@ export default function AnalysisPage() {
       abortRef.current?.abort();
       setRunning(false);
     }
-    // Never leave a run waiting on an answer nobody can give.
     if (answerResolveRef.current) {
       answerResolveRef.current(null);
       answerResolveRef.current = null;
@@ -350,94 +378,144 @@ export default function AnalysisPage() {
   }
 
   const promptDir = textDirection(prompt);
+  const showChart = wantsChart(outputs);
+  const showGrid = wantsGrid(outputs);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2">
-      <PageHeader icon={BarChart3} title={t("analysis.title")} />
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <h1
+        className="border-s-[3px] border-moss ps-3 font-display text-xl text-ink sm:text-2xl"
+      >
+        {t("analysis.title")}
+      </h1>
       <form
         onSubmit={handleRun}
-        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-2xl border border-line/80 bg-paper/80 p-4 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.45)] backdrop-blur-sm sm:p-5"
+        className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-line/70 bg-paper/50 p-4 shadow-[0_24px_60px_-32px_rgba(0,0,0,0.55)] backdrop-blur-sm sm:p-5"
       >
-        <label htmlFor="prompt" className="block text-sm font-medium text-ink">
-          {t("analysis.prompt")}
-        </label>
-        <textarea
-          id="prompt"
-          value={prompt}
-          dir={promptDir}
-          lang={textLang(prompt)}
-          onChange={(e) => setPrompt(e.target.value)}
-          className="min-h-[8rem] w-full flex-1 resize-y rounded-xl border border-line bg-paper px-4 py-3 text-[15px] leading-relaxed text-ink outline-none ring-moss/30 transition focus:border-moss focus:ring-2"
-          placeholder={t("analysis.promptPlaceholder")}
-        />
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
+          <label htmlFor="prompt" className="text-xs font-medium uppercase tracking-wide text-muted">
+            {t("analysis.prompt")}
+          </label>
+          <textarea
+            id="prompt"
+            value={prompt}
+            dir={promptDir}
+            lang={textLang(prompt)}
+            onChange={(e) => setPrompt(e.target.value)}
+            className="min-h-[8.5rem] w-full flex-1 resize-y rounded-2xl border border-line/80 bg-fog/25 px-4 py-3.5 text-[15px] leading-relaxed text-ink outline-none ring-moss/30 transition focus:border-moss focus:ring-2"
+            placeholder={t("analysis.promptPlaceholder")}
+          />
+        </div>
 
-        <div className="flex flex-wrap items-end gap-3 overflow-x-auto">
-          <div className="min-w-[8.5rem] shrink-0">
-            <label htmlFor="mode" className="block text-sm font-medium text-ink">
-              {t("analysis.mode")}
-            </label>
-            <select
-              id="mode"
-              value={mode}
-              onChange={(e) => setMode(e.target.value)}
-              className={selectClass}
+        <div className="space-y-3 border-t border-line/50 pt-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div
+              className={segmentShellClass()}
+              role="group"
+              aria-label={t("analysis.outputs")}
             >
-              {modes.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </div>
+              {outputToggles.map((item) => {
+                const pressed = Boolean(outputs[item.key]);
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    aria-pressed={pressed}
+                    onClick={() => toggleOutput(item.key)}
+                    className={segmentBtnClass(pressed)}
+                  >
+                    <Icon className="size-4 shrink-0" aria-hidden="true" />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
 
-          <div className="min-w-[8.5rem] shrink-0">
-            <label htmlFor="output_language" className="block text-sm font-medium text-ink">
-              {t("analysis.outputLanguage")}
-            </label>
-            <select
-              id="output_language"
-              value={outputLanguage}
-              onChange={(e) => setOutputLanguage(e.target.value)}
-              className={selectClass}
+            <ToolbarDivider />
+
+            <div
+              className={segmentShellClass()}
+              role="group"
+              aria-label={t("analysis.speed")}
             >
-              {outputLanguages.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </div>
+              {speedLevels.map((item) => {
+                const pressed = reportType === item.value;
+                const SpeedIcon = item.icon;
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    aria-pressed={pressed}
+                    onClick={() => setReportType(item.value)}
+                    className={segmentBtnClass(pressed)}
+                  >
+                    {SpeedIcon ? (
+                      <SpeedIcon className="size-4 shrink-0" aria-hidden="true" />
+                    ) : null}
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
 
-          {needsType(mode) ? (
-            <div className="min-w-[8.5rem] shrink-0">
-              <label
-                htmlFor="research_level"
-                className="block text-sm font-medium text-ink"
-              >
-                {t("analysis.research")}
+            <ToolbarDivider />
+
+            <div className="relative shrink-0">
+              <label htmlFor="output_language" className="sr-only">
+                {t("analysis.outputLanguage")}
               </label>
+              <Globe
+                className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+                aria-hidden="true"
+              />
               <select
-                id="research_level"
-                value={reportType}
-                onChange={(e) => setReportType(e.target.value)}
-                className={selectClass}
+                id="output_language"
+                value={outputLanguage}
+                onChange={(e) => setOutputLanguage(e.target.value)}
+                className={languageSelectClass}
               >
-                {researchLevels.map((item) => (
+                {outputLanguages.map((item) => (
                   <option key={item.value} value={item.value}>
                     {item.label}
                   </option>
                 ))}
               </select>
+              <ChevronDown
+                className="pointer-events-none absolute end-2.5 top-1/2 size-4 -translate-y-1/2 text-muted"
+                aria-hidden="true"
+              />
             </div>
-          ) : null}
 
-          {needsChart(mode) ? (
-            <div className="min-w-0 shrink-0">
-              <span className="block text-sm font-medium text-ink">
-                {t("analysis.chart")}
-              </span>
+            <ToolbarDivider />
+
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={allowOperatorQuestions}
+                onChange={(e) => setAllowOperatorQuestions(e.target.checked)}
+                className="size-4 rounded border-line bg-fog/40 text-moss focus:ring-moss"
+              />
+              <span className="whitespace-nowrap">{t("analysis.allowQuestions")}</span>
+            </label>
+
+            <div className="ms-auto w-full sm:w-auto">
+              <IconButton
+                type="submit"
+                icon={Play}
+                disabled={running}
+                className="w-full shrink-0 rounded-full bg-moss px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-moss-deep disabled:opacity-60 sm:w-auto"
+              >
+                {t("analysis.run")}
+              </IconButton>
+            </div>
+          </div>
+
+          {showChart ? (
+            <div>
+              <p className="sr-only">{t("analysis.chartMultiHint")}</p>
               <div
-                className="mt-1 flex flex-wrap gap-1.5"
+                className="flex flex-wrap gap-2"
                 role="group"
                 aria-label={t("analysis.chart")}
               >
@@ -454,15 +532,9 @@ export default function AnalysisPage() {
                       aria-pressed={pressed}
                       disabled={atCap}
                       onClick={() => toggleChartType(item.value)}
-                      className={[
-                        "inline-flex size-10 items-center justify-center rounded-xl border transition",
-                        pressed
-                          ? "border-moss bg-moss/15 text-ink"
-                          : "border-line bg-paper text-muted hover:bg-fog",
-                        atCap ? "cursor-not-allowed opacity-50" : "",
-                      ].join(" ")}
+                      className={chartIconBtnClass(pressed, atCap)}
                     >
-                      <Icon className="size-5" aria-hidden="true" />
+                      <Icon className="size-8" aria-hidden="true" />
                     </button>
                   );
                 })}
@@ -470,34 +542,9 @@ export default function AnalysisPage() {
             </div>
           ) : null}
 
-          {needsColumns(mode) ? (
-            <div className="min-w-[12rem] flex-1">
-              <label htmlFor="grid_columns" className="block text-sm font-medium text-ink">
-                {t("analysis.columns")}
-              </label>
-              <input
-                id="grid_columns"
-                type="text"
-                value={gridColumns}
-                onChange={(e) => setGridColumns(e.target.value)}
-                placeholder={t("analysis.columnsPlaceholder")}
-                aria-describedby="grid_columns_hint"
-                className={selectClass}
-              />
-              <p id="grid_columns_hint" className="mt-1 text-xs text-muted">
-                {t("analysis.columnsHint")}
-              </p>
-            </div>
+          {showGrid ? (
+            <GridColumnInput columns={gridColumns} onChange={setGridColumns} />
           ) : null}
-
-          <IconButton
-            type="submit"
-            icon={Play}
-            disabled={running}
-            className="shrink-0 rounded-xl bg-moss px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-moss-deep disabled:opacity-60"
-          >
-            {t("analysis.run")}
-          </IconButton>
         </div>
       </form>
 

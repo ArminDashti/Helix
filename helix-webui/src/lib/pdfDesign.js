@@ -30,9 +30,11 @@ function createElementStyle(overrides = {}) {
     fontSizePx: 14,
     color: "#111111",
     backgroundColor: "transparent",
+    borderColor: "#3d9b82",
     borderWidthPx: 1,
     borderRadiusPx: 14,
     paddingPx: 14,
+    textAlign: "inherit",
     ...overrides,
   };
 }
@@ -67,9 +69,22 @@ export const DEFAULT_PDF_DESIGN = {
   orientation: "landscape",
   companyLogoDataUrl: "",
   footerText: "",
+  reportTitleOverride: "",
   pageBackgroundColor: "#ffffff",
+  pageMarginMm: 12,
+  footerShowDate: true,
+  footerShowPageNumbers: true,
   elements: defaultElements(),
 };
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
+function normalizeHexColor(value, fallback) {
+  const s = String(value ?? "").trim();
+  return HEX_COLOR.test(s) ? s : fallback;
+}
+
+const TEXT_ALIGN_VALUES = new Set(["left", "center", "right"]);
 
 const MAX_LOGO_DATA_URL_CHARS = 400_000;
 
@@ -91,9 +106,13 @@ function mergeElement(id, partial) {
     fontSizePx: clampInt(partial.fontSizePx, 8, 48, base.fontSizePx),
     color: String(partial.color ?? base.color),
     backgroundColor: String(partial.backgroundColor ?? base.backgroundColor),
+    borderColor: normalizeHexColor(partial.borderColor, base.borderColor),
     borderWidthPx: clampInt(partial.borderWidthPx, 0, 8, base.borderWidthPx),
     borderRadiusPx: clampInt(partial.borderRadiusPx, 0, 24, base.borderRadiusPx),
     paddingPx: clampInt(partial.paddingPx, 0, 48, base.paddingPx),
+    textAlign: TEXT_ALIGN_VALUES.has(partial.textAlign)
+      ? partial.textAlign
+      : base.textAlign,
   };
 }
 
@@ -105,11 +124,26 @@ export function normalizePdfDesign(raw = {}) {
     companyLogoDataUrl:
       typeof raw.companyLogoDataUrl === "string" ? raw.companyLogoDataUrl : "",
     footerText: typeof raw.footerText === "string" ? raw.footerText : "",
-    pageBackgroundColor:
-      typeof raw.pageBackgroundColor === "string" &&
-      /^#[0-9a-fA-F]{6}$/.test(raw.pageBackgroundColor)
-        ? raw.pageBackgroundColor
-        : DEFAULT_PDF_DESIGN.pageBackgroundColor,
+    reportTitleOverride:
+      typeof raw.reportTitleOverride === "string" ? raw.reportTitleOverride : "",
+    pageBackgroundColor: normalizeHexColor(
+      raw.pageBackgroundColor,
+      DEFAULT_PDF_DESIGN.pageBackgroundColor,
+    ),
+    pageMarginMm: clampInt(
+      raw.pageMarginMm,
+      8,
+      24,
+      DEFAULT_PDF_DESIGN.pageMarginMm,
+    ),
+    footerShowDate:
+      raw.footerShowDate !== undefined
+        ? Boolean(raw.footerShowDate)
+        : DEFAULT_PDF_DESIGN.footerShowDate,
+    footerShowPageNumbers:
+      raw.footerShowPageNumbers !== undefined
+        ? Boolean(raw.footerShowPageNumbers)
+        : DEFAULT_PDF_DESIGN.footerShowPageNumbers,
     elements: defaultElements(),
   };
 
@@ -191,4 +225,9 @@ export function savePdfDesign(prefs) {
 export function elementStyle(prefs, id) {
   const elements = prefs?.elements || defaultElements();
   return mergeElement(id, elements[id]);
+}
+
+/** Serializable design for export (no legacy keys). */
+export function designForExport(prefs) {
+  return normalizePdfDesign(prefs);
 }

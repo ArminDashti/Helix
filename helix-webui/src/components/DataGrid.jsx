@@ -13,11 +13,11 @@ export default function DataGrid({
       dir="ltr"
       className="min-h-0 flex-1 overflow-auto rounded-2xl border border-line/80 bg-paper/80"
     >
-      <table className="min-w-full text-start font-sans text-sm">
+      <table className="min-w-full text-center font-sans text-sm">
         <thead className="sticky top-0 bg-fog/80 text-xs uppercase tracking-wide text-muted backdrop-blur">
           <tr>
             {columns.map((col) => (
-              <th key={col.key} className="whitespace-nowrap px-3 py-2 font-sans font-semibold">
+              <th key={col.key} className="whitespace-nowrap px-3 py-2 text-center font-sans font-semibold">
                 {col.label}
               </th>
             ))}
@@ -27,7 +27,7 @@ export default function DataGrid({
           {rows.length === 0 ? (
             <tr>
               <td
-                className="px-3 py-4 font-sans text-sm text-muted"
+                className="px-3 py-4 text-center font-sans text-sm text-muted"
                 colSpan={columns.length}
               >
                 {emptyText}
@@ -44,7 +44,7 @@ export default function DataGrid({
                 onClick={onRowClick ? () => onRowClick(row.item) : undefined}
               >
                 {columns.map((col) => (
-                  <td key={col.key} className="px-3 py-2 align-top font-sans">
+                  <td key={col.key} className="px-3 py-2 text-center align-middle font-sans">
                     {col.render(row.item)}
                   </td>
                 ))}

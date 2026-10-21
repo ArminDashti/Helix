@@ -412,7 +412,7 @@ def _package_result(ctx: dict[str, Any]) -> dict[str, Any]:
     echarts_options: list[dict[str, Any]] = []
     grid = None
     if fetch:
-        if mode in ("chart", "analytical_report_chart", "auto"):
+        if mode in ("chart", "analytical_report_chart", "auto", "chart_grid"):
             for ctype in chart_types:
                 option = build_echarts_option(
                     fetch, chart_type=ctype, language=language
@@ -422,13 +422,19 @@ def _package_result(ctx: dict[str, Any]) -> dict[str, Any]:
             if echarts_options:
                 echarts_option = echarts_options[0]["option"]
                 chart_type = echarts_options[0]["chart_type"]
-        if mode in ("grid", "auto", "analytical_report_chart"):
+        if mode in ("grid", "auto", "analytical_report_chart", "chart_grid"):
             grid = build_grid(fetch, ctx.get("columns"))
         if mode == "analytical_report":
-            grid = None
             echarts_option = None
             echarts_options = []
+            raw_cols = ctx.get("columns")
+            if isinstance(raw_cols, list) and [c for c in raw_cols if str(c).strip()]:
+                grid = build_grid(fetch, raw_cols)
+            else:
+                grid = None
         if mode == "chart":
+            text_report = None
+        if mode == "chart_grid":
             text_report = None
         if mode == "grid":
             text_report = None
@@ -436,8 +442,8 @@ def _package_result(ctx: dict[str, Any]) -> dict[str, Any]:
             echarts_options = []
     if mode in ("analytical_report", "analytical_report_chart", "auto") and not text_report:
         raise ValueError("No report text was produced from the query results")
-    if mode in ("chart", "analytical_report_chart", "auto") and not echarts_option and mode != "analytical_report":
-        if mode in ("chart", "analytical_report_chart"):
+    if mode in ("chart", "analytical_report_chart", "auto", "chart_grid") and not echarts_option and mode != "analytical_report":
+        if mode in ("chart", "analytical_report_chart", "chart_grid"):
             raise ValueError("No chart could be built from the query results")
     return {
         "mode": mode,
@@ -661,6 +667,7 @@ def pipeline_events(
     chart_type: str | None = None,
     chart_types: list[str] | None = None,
     columns: list[str] | None = None,
+    allow_operator_questions: bool = True,
     actor: dict[str, Any] | None = None,
 ) -> Iterator[str]:
     from .researcher_turn_loop import detect_prompt_language
@@ -674,6 +681,7 @@ def pipeline_events(
         "chart_type": chart_type,
         "chart_types": chart_types,
         "columns": columns,
+        "allow_operator_questions": allow_operator_questions,
         "actor": actor or {"username": "guest", "is_admin": False, "is_guest": True},
         "artifacts": {},
         "run_id": uuid.uuid4().hex,
@@ -861,6 +869,7 @@ def run_pipeline_sync(
     chart_type: str | None = None,
     chart_types: list[str] | None = None,
     columns: list[str] | None = None,
+    allow_operator_questions: bool = True,
     actor: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     result: dict[str, Any] | None = None
@@ -874,6 +883,7 @@ def run_pipeline_sync(
         chart_type=chart_type,
         chart_types=chart_types,
         columns=columns,
+        allow_operator_questions=allow_operator_questions,
         actor=actor,
     ):
         line = chunk.strip()

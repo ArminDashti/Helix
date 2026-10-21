@@ -5,7 +5,7 @@ import { ApiStatusProvider } from "./context/ApiStatusContext.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { LiveSyncProvider } from "./context/LiveSyncContext.jsx";
 import { I18nProvider } from "./context/I18nContext.jsx";
-import AboutMePage from "./pages/AboutMePage.jsx";
+import HelpPage from "./pages/HelpPage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
 import AgentAssignmentsPage from "./pages/AgentAssignmentsPage.jsx";
 import AgentsPage from "./pages/AgentsPage.jsx";
@@ -21,6 +21,7 @@ import LogsPage from "./pages/LogsPage.jsx";
 import McpPage from "./pages/McpPage.jsx";
 import KnowledgePage from "./pages/KnowledgePage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
+import ProfilePage from "./pages/ProfilePage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import SkillsPage from "./pages/SkillsPage.jsx";
 
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="rag" element={<Navigate to="/knowledge?tab=rag" replace />} />
             <Route path="mcp" element={<McpPage />} />
             <Route path="db-explorer" element={<DbExplorerPage />} />
+            <Route path="profile" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route
               path="admin"
@@ -71,7 +73,8 @@ export default function App() {
                 </RequireAuth>
               }
             />
-            <Route path="about-me" element={<AboutMePage />} />
+            <Route path="help" element={<HelpPage />} />
+            <Route path="about-me" element={<Navigate to="/help?tab=about" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

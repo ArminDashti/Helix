@@ -59,6 +59,29 @@ class WarehouseSettingsTests(SimpleTestCase):
         self.assertEqual(result["name"], "")
 
 
+class DataFileImportTests(SimpleTestCase):
+    def test_csv_import_builds_sqlite(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from .data_file_import import import_uploaded_file
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            with override_settings(BASE_DIR=tmp):
+                Path(tmp).joinpath("data").mkdir()
+                upload = SimpleUploadedFile(
+                    "orders.csv",
+                    b"id,total\n1,9.5\n2,12\n",
+                    content_type="text/csv",
+                )
+                path, tables = import_uploaded_file(upload)
+                self.assertEqual(tables, ["orders"])
+                import sqlite3
+
+                with sqlite3.connect(path) as conn:
+                    count = conn.execute('SELECT COUNT(*) FROM "orders"').fetchone()[0]
+                self.assertEqual(count, 2)
+
+
 class PipelineAgentTests(SimpleTestCase):
     def test_seed_pipeline_agents_are_listed_and_deletable(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1694,6 +1717,38 @@ class OperatorQuestionTests(_PauseSpoolMixin, SimpleTestCase):
         # The answer reaches the agent that runs after the pause.
         self.assertIn("last quarter", self._user_prompt(seen["researcher"][0]))
         self.assertIsNone(run_store.peek_paused(ctx["run_id"]))
+
+    def test_orchester_skips_questions_when_operator_questions_disabled(self):
+        from . import markdown_store as store
+
+        ctx = self._ctx(allow_operator_questions=False)
+        seen: dict[str, list] = {}
+        fake_chat = self._chat(
+            {
+                "orchester": [
+                    {
+                        "role": "assistant",
+                        "content": (
+                            '{"result":"needs_input","goals":"top products",'
+                            '"questions":["Which period should the report cover?"]}'
+                        ),
+                    },
+                    self.PASS,
+                ],
+                "researcher": [self.SQL_CALL, self.RESEARCHER_DONE],
+            },
+            seen,
+        )
+
+        with patch("api.pipeline_langgraph.complete_chat_messages", side_effect=fake_chat):
+            with patch("api.pipeline_run.execute_select", return_value=self.SELECT):
+                with patch.object(store, "assemble_agent_prompt", return_value="system"):
+                    events = self._drain(ctx)
+
+        questions = [event for event in events if event.get("event") == "question"]
+        self.assertEqual(questions, [])
+        self.assertIn("researcher", seen)
+        self.assertEqual(ctx["_orchester_outcome"][0], "done")
 
     def test_researcher_fetches_rows_with_execute_select(self):
         from . import markdown_store as store

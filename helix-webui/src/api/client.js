@@ -131,9 +131,9 @@ async function parseJson(response, path, { silent = false } = {}) {
         status: response.status,
         title: serverError ? "Server error" : "API misconfigured",
         message: serverError
-          ? "The API timed out or crashed — try again or check helix-api logs."
+          ? "Server error"
           : "Got HTML instead of JSON — check the API proxy or base URL.",
-        detail: `HTTP ${response.status}`,
+        detail: "",
         path,
       });
       if (!silent) emitApiError(apiErr);
@@ -156,7 +156,7 @@ async function parseJson(response, path, { silent = false } = {}) {
       status: response.status,
       title: httpTitle(response.status),
       message: serverMsg,
-      detail: `HTTP ${response.status}`,
+      detail: "",
       path,
     });
     if (!silent) emitApiError(apiErr);
@@ -363,6 +363,16 @@ export async function saveDatabaseSettings(database) {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ database }),
+  });
+}
+
+/** Upload CSV, Excel, JSON, or SQLite; API converts to SQLite and activates it. */
+export async function importDatabaseFile(file) {
+  const form = new FormData();
+  form.append("file", file);
+  return requestJson("/api/admin/database/import/", {
+    method: "POST",
+    body: form,
   });
 }
 
@@ -766,6 +776,7 @@ export async function streamRun(
     chart_type,
     chart_types,
     columns,
+    allow_operator_questions,
   },
   onEvent,
   signal,
@@ -776,6 +787,7 @@ export async function streamRun(
   if (chart_type) body.chart_type = chart_type;
   if (chart_types?.length) body.chart_types = chart_types;
   if (columns?.length) body.columns = columns;
+  if (allow_operator_questions === false) body.allow_operator_questions = false;
   const logContext = {
     prompt,
     mode,
@@ -814,7 +826,7 @@ export async function streamRun(
       status: response.status,
       title: httpTitle(response.status),
       message: message || `API error ${response.status}`,
-      detail: `HTTP ${response.status}`,
+      detail: "",
       path,
     });
     emitApiError(apiErr);
@@ -967,7 +979,7 @@ export async function answerRun({ runId, answers }, onEvent, signal) {
       status: response.status,
       title: httpTitle(response.status),
       message: message || `API error ${response.status}`,
-      detail: `HTTP ${response.status}`,
+      detail: "",
       path,
     });
   }
@@ -1034,7 +1046,16 @@ export async function answerRun({ runId, answers }, onEvent, signal) {
  * This avoids realtime streaming UI updates.
  */
 export async function runChat(
-  { prompt, mode, language = "en", report_type, chart_type, chart_types, columns },
+  {
+    prompt,
+    mode,
+    language = "en",
+    report_type,
+    chart_type,
+    chart_types,
+    columns,
+    allow_operator_questions,
+  },
   signal,
 ) {
   const path = "/api/chat";
@@ -1047,6 +1068,7 @@ export async function runChat(
   if (chart_type) body.chart_type = chart_type;
   if (chart_types?.length) body.chart_types = chart_types;
   if (columns?.length) body.columns = columns;
+  if (allow_operator_questions === false) body.allow_operator_questions = false;
 
   const response = await requestJson(path, {
     method: "POST",
