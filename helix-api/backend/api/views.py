@@ -1083,7 +1083,7 @@ def _parse_run_options(
     if not prompt:
         return _error("prompt is required")
     if report_type is not None and report_type not in VALID_REPORT_TYPES:
-        return _error("report_type must be low, medium, or high")
+        return _error("report_type must be low, balanced, or high")
     if chart_type is not None and chart_type not in VALID_CHART_TYPES:
         return _error("chart_type is invalid")
 

@@ -49,10 +49,15 @@ def _normalize_mode(mode: str) -> str:
 
 
 def _normalize_report_type(report_type: str | None) -> str:
-    aliases = {"simple": "low", "summary": "medium", "deep": "high"}
-    value = aliases.get(report_type or "", report_type or "medium")
-    if value not in {"low", "medium", "high"}:
-        return "medium"
+    aliases = {
+        "simple": "low",
+        "summary": "balanced",
+        "medium": "balanced",
+        "deep": "high",
+    }
+    value = aliases.get(report_type or "", report_type or "balanced")
+    if value not in {"low", "balanced", "high"}:
+        return "balanced"
     return value
 
 
@@ -317,3 +322,4 @@ def get_demo_result(
         "echarts_options": echarts_options or None,
         "grid": grid,
     }
+

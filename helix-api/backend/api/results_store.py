@@ -102,6 +102,26 @@ def _coerce_rag(value: Any) -> dict[str, Any] | None:
     }
 
 
+def _token_usage_from_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    usage = _coerce_usage(item.get("token_usage"))
+    if usage is not None:
+        return usage
+    payload = item.get("payload")
+    if isinstance(payload, dict):
+        return _coerce_usage(payload.get("token_usage"))
+    return None
+
+
+def _rag_from_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    rag = _coerce_rag(item.get("rag"))
+    if rag is not None:
+        return rag
+    payload = item.get("payload")
+    if isinstance(payload, dict):
+        return _coerce_rag(payload.get("rag"))
+    return None
+
+
 def _summary(item: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": item.get("id"),
@@ -111,8 +131,8 @@ def _summary(item: dict[str, Any]) -> dict[str, Any]:
         "language": item.get("language") or "en",
         "archived": bool(item.get("archived")),
         "duration_s": _coerce_duration_s(item.get("duration_s")),
-        "token_usage": _coerce_usage(item.get("token_usage")),
-        "rag": _coerce_rag(item.get("rag")),
+        "token_usage": _token_usage_from_item(item),
+        "rag": _rag_from_item(item),
     }
 
 

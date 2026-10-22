@@ -80,6 +80,7 @@ def complete_chat_messages(
     *,
     tools: list[dict[str, Any]] | None = None,
     session_id: str | None = None,
+    intelligence_level: str | None = None,
 ) -> dict[str, Any]:
     """Multi-turn OpenAI-compatible chat; returns the assistant message dict.
 
@@ -99,6 +100,7 @@ def complete_chat_messages(
         provider=provider,
         tools=tools,
         session_id=session_id,
+        intelligence_level=intelligence_level,
     )
 
 
@@ -159,8 +161,13 @@ def complete_test_chat(
     }
 
 
-def _resolve_model(agent_id: str, provider: str) -> str:
-    model = get_agent_model(agent_id)
+def _resolve_model(
+    agent_id: str, provider: str, *, intelligence_level: str | None = None
+) -> str:
+    if intelligence_level:
+        model = get_agent_model(agent_id, intelligence_level=intelligence_level)
+    else:
+        model = get_agent_model(agent_id)
     if not model or model == "auto":
         if provider == "openrouter":
             return _OPENROUTER_AUTO_MODEL
@@ -177,8 +184,9 @@ def _chat_completions_request(
     provider: str,
     tools: list[dict[str, Any]] | None = None,
     session_id: str | None = None,
+    intelligence_level: str | None = None,
 ) -> dict[str, Any]:
-    model = _resolve_model(agent_id, provider)
+    model = _resolve_model(agent_id, provider, intelligence_level=intelligence_level)
     payload = _post_chat(
         provider=provider,
         token=token,

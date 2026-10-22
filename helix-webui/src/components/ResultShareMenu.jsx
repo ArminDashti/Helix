@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Share2 } from "lucide-react";
 import IconButton from "./IconButton.jsx";
+import ShareChannelIcon from "./ShareChannelIcon.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
 import {
   buildShareBody,
@@ -21,20 +22,6 @@ const CHANNEL_LABEL_KEYS = {
   email: "results.shareEmail",
   copy: "results.shareCopyLink",
   native: "results.shareNative",
-};
-
-const BRAND_DOT = {
-  telegram: "bg-[#26A5E4]",
-  whatsapp: "bg-[#25D366]",
-  linkedin: "bg-[#0A66C2]",
-  gmail: "bg-[#EA4335]",
-  outlook: "bg-[#0078D4]",
-  x: "bg-ink",
-  facebook: "bg-[#1877F2]",
-  reddit: "bg-[#FF4500]",
-  email: "bg-moss",
-  copy: "bg-muted",
-  native: "bg-moss",
 };
 
 function canNativeShare() {
@@ -71,7 +58,7 @@ export default function ResultShareMenu({
     const all = resultShareChannels({ url, subject, body, bodyText });
     if (canNativeShare()) return all;
     return all.filter((ch) => ch.id !== "native");
-  }, [url, subject, body]);
+  }, [url, subject, body, bodyText]);
 
   useEffect(() => {
     if (!open) return;
@@ -160,13 +147,7 @@ export default function ResultShareMenu({
                 className="flex w-full items-center gap-2.5 px-3 py-2 text-start text-sm text-ink hover:bg-fog/80"
                 onClick={() => handleChannel(channel)}
               >
-                <span
-                  className={[
-                    "size-2 shrink-0 rounded-full",
-                    BRAND_DOT[channel.id] || "bg-line",
-                  ].join(" ")}
-                  aria-hidden="true"
-                />
+                <ShareChannelIcon channelId={channel.id} />
                 {label}
               </button>
             );

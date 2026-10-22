@@ -85,6 +85,8 @@ const EMPTY_OPENROUTER = {
 
 const LLM_AGENT_IDS = ["orchester", "researcher"];
 
+const INTELLIGENCE_LEVEL_IDS = ["low", "balanced", "high"];
+
 // The API is the source of truth for which connectors exist; these keys only translate the ones
 // the webui already knows. A connector added server-side still shows up here, labelled by the API.
 const CONNECTOR_LABEL_KEYS = {
@@ -846,14 +848,34 @@ export default function SettingsPage() {
     setOrForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function updateAgentModel(agentId, model) {
-    setOrForm((prev) => ({
-      ...prev,
-      agents: {
-        ...prev.agents,
-        [agentId]: { ...(prev.agents?.[agentId] || {}), model },
-      },
-    }));
+  function intelligenceLabel(levelId) {
+    if (levelId === "low") return t("settings.intelligenceLow");
+    if (levelId === "balanced") return t("settings.intelligenceBalanced");
+    if (levelId === "high") return t("settings.intelligenceHigh");
+    return levelId;
+  }
+
+  function updateAgentTierModel(agentId, levelId, model) {
+    setOrForm((prev) => {
+      const prevAgent = prev.agents?.[agentId] || {};
+      const prevModels = prevAgent.models || {};
+      const nextModels = {
+        ...prevModels,
+        [levelId]: { ...(prevModels[levelId] || {}), model },
+      };
+      const balanced = nextModels.balanced?.model || prevAgent.model || model;
+      return {
+        ...prev,
+        agents: {
+          ...prev.agents,
+          [agentId]: {
+            ...prevAgent,
+            model: balanced,
+            models: nextModels,
+          },
+        },
+      };
+    });
   }
 
   function handleApiChange(next) {
@@ -1349,22 +1371,34 @@ export default function SettingsPage() {
 
           <div>
             <h3 className="mb-2 text-sm font-medium text-ink">{t("settings.perAgent")}</h3>
-            <div className="grid gap-3 sm:grid-cols-5">
+            <p className="mb-3 text-xs text-muted">{t("settings.perAgentIntelligenceHint")}</p>
+            <div className="space-y-4">
               {agentIds.map((agentId) => (
-                <Field
-                  key={agentId}
-                  label={agentLabel(agentId)}
-                  id={`agent-${agentId}`}
-                >
-                  <ModelCombobox
-                    id={`agent-${agentId}`}
-                    value={orForm.agents?.[agentId]?.model || ""}
-                    onChange={(v) => updateAgentModel(agentId, v)}
-                    models={models}
-                    loading={modelsLoading}
-                    placeholder={modelPlaceholder}
-                  />
-                </Field>
+                <div key={agentId}>
+                  <p className="mb-2 text-sm font-medium text-ink">{agentLabel(agentId)}</p>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {INTELLIGENCE_LEVEL_IDS.map((levelId) => (
+                      <Field
+                        key={`${agentId}-${levelId}`}
+                        label={intelligenceLabel(levelId)}
+                        id={`agent-${agentId}-${levelId}`}
+                      >
+                        <ModelCombobox
+                          id={`agent-${agentId}-${levelId}`}
+                          value={
+                            orForm.agents?.[agentId]?.models?.[levelId]?.model ||
+                            orForm.agents?.[agentId]?.model ||
+                            ""
+                          }
+                          onChange={(v) => updateAgentTierModel(agentId, levelId, v)}
+                          models={models}
+                          loading={modelsLoading}
+                          placeholder={modelPlaceholder}
+                        />
+                      </Field>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>

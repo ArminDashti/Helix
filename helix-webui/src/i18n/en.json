@@ -141,7 +141,7 @@
     "promptRequired": "prompt is required",
     "modeLanguageStrings": "mode and language must be strings",
     "languageEnOrFa": "language must be en or fa",
-    "reportType": "report_type must be low, medium, or high",
+    "reportType": "report_type must be low, balanced, or high",
     "chartTypeInvalid": "chart_type is invalid",
     "idRequired": "id is required",
     "nameRequired": "name is required",
@@ -180,12 +180,8 @@
     "promptDefault": "Show total sales by product category",
     "mode": "Mode",
     "outputs": "Outputs",
-    "speed": "Analysis speed",
-    "speedFast": "Fast",
-    "speedNormal": "Normal",
-    "speedLong": "Long",
     "allowQuestions": "Clarifying questions",
-    "outputRequired": "Select at least one output: Chart, Grid, or Research.",
+    "outputRequired": "Select one output: Chart, Grid, or Research.",
     "columnsAdd": "Add",
     "removeColumn": "Remove column",
     "outputLanguage": "Output language",
@@ -194,10 +190,6 @@
     "modeChart": "Chart",
     "modeGrid": "Grid",
     "modeResearch": "Research",
-    "research": "Research",
-    "researchLow": "Low",
-    "researchMedium": "Medium",
-    "researchHigh": "High",
     "chart": "Chart",
     "chartMultiHint": "Select up to 4 chart types for one result.",
     "chartRequired": "Select at least one chart type.",
@@ -218,7 +210,11 @@
     "llmUnreachable": "Cannot reach the API; LLM cannot be used.",
     "apiKeyMissing": "API key is not set",
     "runFailed": "Run failed",
-    "runStopped": "Analysis stopped"
+    "runStopped": "Analysis stopped",
+    "intelligence": "Intelligence",
+    "intelligenceLow": "Low",
+    "intelligenceBalanced": "Balanced",
+    "intelligenceHigh": "High"
   },
   "runProgress": {
     "title": "Running analysis",
@@ -593,7 +589,11 @@
     "blockedTablesHint": "One entry per line. Agents cannot fetch from these. Use Table, Schema.Table, or Schema.* for a whole schema.",
     "blockedTablesSave": "Save Restrictions",
     "blockedTablesSaved": "Restrictions saved.",
-    "dbSaved": "Database settings saved to helix.config.yaml."
+    "dbSaved": "Database settings saved to helix.config.yaml.",
+    "intelligenceLow": "Low",
+    "intelligenceBalanced": "Balanced",
+    "intelligenceHigh": "High",
+    "perAgentIntelligenceHint": "Set Low, Balanced, and High models for each agent. Analysis intelligence picks the tier for the run."
   },
   "models": {
     "search": "Search models…",
@@ -940,3 +940,4 @@
     "delete": "Delete"
   }
 }
+

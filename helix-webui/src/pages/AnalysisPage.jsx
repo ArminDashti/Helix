@@ -182,8 +182,12 @@ export default function AnalysisPage() {
     };
   }, []);
 
-  function toggleOutput(key) {
-    setOutputs((prev) => ({ ...prev, [key]: !prev[key] }));
+  function selectOutputMode(key) {
+    setOutputs({
+      chart: key === "chart",
+      grid: key === "grid",
+      research: key === "research",
+    });
   }
 
   async function handleRun(event) {
@@ -411,19 +415,20 @@ export default function AnalysisPage() {
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div
               className={segmentShellClass()}
-              role="group"
+              role="radiogroup"
               aria-label={t("analysis.outputs")}
             >
               {outputToggles.map((item) => {
-                const pressed = Boolean(outputs[item.key]);
+                const selected = Boolean(outputs[item.key]);
                 const Icon = item.icon;
                 return (
                   <button
                     key={item.key}
                     type="button"
-                    aria-pressed={pressed}
-                    onClick={() => toggleOutput(item.key)}
-                    className={segmentBtnClass(pressed)}
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => selectOutputMode(item.key)}
+                    className={segmentBtnClass(selected)}
                   >
                     <Icon className="size-4 shrink-0" aria-hidden="true" />
                     {item.label}

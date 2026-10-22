@@ -2372,6 +2372,28 @@ class ResultsStoreTests(SimpleTestCase):
                 self.assertEqual(listed["rag"]["docs"], ["sales-glossary"])
                 self.assertEqual(listed["rag"]["tokens"], 210)
 
+    def test_list_summary_reads_token_usage_from_payload_when_root_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with override_settings(MARKDOWN_FILES_DIR=tmp):
+                from . import results_store
+
+                results_store.create_result(
+                    prompt="nested usage",
+                    mode="grid",
+                    language="en",
+                    payload={
+                        "token_usage": {
+                            "prompt_tokens": 100,
+                            "completion_tokens": 50,
+                            "total_tokens": 150,
+                            "calls": 2,
+                        }
+                    },
+                )
+                listed = results_store.list_results()[0]
+                self.assertEqual(listed["token_usage"]["total_tokens"], 150)
+                self.assertEqual(listed["token_usage"]["calls"], 2)
+
     def test_create_result_drops_an_empty_usage_block(self):
         with tempfile.TemporaryDirectory() as tmp:
             with override_settings(MARKDOWN_FILES_DIR=tmp):

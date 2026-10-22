@@ -141,7 +141,7 @@
     "promptRequired": "متن درخواست لازم است",
     "modeLanguageStrings": "حالت و زبان باید رشته باشند",
     "languageEnOrFa": "زبان باید en یا fa باشد",
-    "reportType": "نوع گزارش باید low، medium یا high باشد",
+    "reportType": "نوع گزارش باید low، balanced یا high باشد",
     "chartTypeInvalid": "نوع نمودار نامعتبر است",
     "idRequired": "شناسه لازم است",
     "nameRequired": "نام لازم است",
@@ -180,12 +180,8 @@
     "promptDefault": "مجموع فروش را بر اساس دسته محصول نشان بده",
     "mode": "حالت",
     "outputs": "خروجی‌ها",
-    "speed": "سرعت تحلیل",
-    "speedFast": "سریع",
-    "speedNormal": "معمولی",
-    "speedLong": "طولانی",
     "allowQuestions": "پرسش‌های توضیحی",
-    "outputRequired": "حداقل یک خروجی انتخاب کنید: نمودار، جدول یا پژوهش.",
+    "outputRequired": "یک خروجی انتخاب کنید: نمودار، جدول یا پژوهش.",
     "columnsAdd": "افزودن",
     "removeColumn": "حذف ستون",
     "outputLanguage": "زبان خروجی",
@@ -194,10 +190,6 @@
     "modeChart": "نمودار",
     "modeGrid": "جدول",
     "modeResearch": "پژوهش",
-    "research": "پژوهش",
-    "researchLow": "کم",
-    "researchMedium": "متوسط",
-    "researchHigh": "زیاد",
     "chart": "نمودار",
     "chartMultiHint": "تا ۴ نوع نمودار برای یک نتیجه انتخاب کنید.",
     "chartRequired": "دست‌کم یک نوع نمودار را انتخاب کنید.",
@@ -218,7 +210,11 @@
     "llmUnreachable": "دسترسی به API ممکن نیست؛ مدل زبانی قابل استفاده نیست.",
     "apiKeyMissing": "کلید API تنظیم نشده است",
     "runFailed": "اجرا ناموفق بود",
-    "runStopped": "تحلیل متوقف شد"
+    "runStopped": "تحلیل متوقف شد",
+    "intelligence": "هوش",
+    "intelligenceLow": "کم",
+    "intelligenceBalanced": "متعادل",
+    "intelligenceHigh": "زیاد"
   },
   "runProgress": {
     "title": "در حال اجرای تحلیل",
@@ -593,7 +589,11 @@
     "blockedTablesHint": "هر مورد در یک خط. ایجنت‌ها نمی‌توانند از این‌ها داده بگیرند. از Table، Schema.Table یا Schema.* برای کل اسکیما استفاده کنید.",
     "blockedTablesSave": "ذخیره محدودیت‌ها",
     "blockedTablesSaved": "محدودیت‌ها ذخیره شد.",
-    "dbSaved": "تنظیمات پایگاه داده در helix.config.yaml ذخیره شد."
+    "dbSaved": "تنظیمات پایگاه داده در helix.config.yaml ذخیره شد.",
+    "intelligenceLow": "کم",
+    "intelligenceBalanced": "متعادل",
+    "intelligenceHigh": "زیاد",
+    "perAgentIntelligenceHint": "برای هر عامل مدل کم، متعادل و زیاد را تنظیم کنید. سطح هوش در تحلیل همان tier را برای اجرا انتخاب می‌کند."
   },
   "models": {
     "search": "جستجوی مدل‌ها…",
@@ -940,3 +940,4 @@
     "delete": "حذف"
   }
 }
+

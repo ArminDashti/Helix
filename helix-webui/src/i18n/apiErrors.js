@@ -25,7 +25,7 @@ const EXACT_KEYS = {
   "prompt is required": "api.promptRequired",
   "mode and language must be strings": "api.modeLanguageStrings",
   "language must be en or fa": "api.languageEnOrFa",
-  "report_type must be low, medium, or high": "api.reportType",
+  "report_type must be low, balanced, or high": "api.reportType",
   "chart_type is invalid": "api.chartTypeInvalid",
   "id is required": "api.idRequired",
   "name is required": "api.nameRequired",

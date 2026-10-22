@@ -140,6 +140,30 @@ DEFAULT_AGENT_MODELS = {
     "orchester": DEFAULT_LLM_MODEL,
 }
 
+INTELLIGENCE_LEVELS = ("low", "balanced", "high")
+PIPELINE_LLM_AGENT_IDS = frozenset({"orchester", "researcher"})
+
+
+def _merge_agent_tier_models(
+    entry: dict[str, Any],
+    intel_raw: dict[str, Any],
+    fallback_model: str,
+) -> dict[str, dict[str, str]]:
+    nested = entry.get("models") if isinstance(entry.get("models"), dict) else {}
+    legacy_single = str(entry.get("model") or "").strip()
+    out: dict[str, dict[str, str]] = {}
+    for level in INTELLIGENCE_LEVELS:
+        tier = nested.get(level) if isinstance(nested.get(level), dict) else {}
+        model = str(tier.get("model") or "").strip()
+        if not model and legacy_single:
+            model = legacy_single
+        if not model:
+            global_tier = intel_raw.get(level) if isinstance(intel_raw.get(level), dict) else {}
+            model = str(global_tier.get("model") or "").strip()
+        out[level] = {"model": model or fallback_model}
+    return out
+
+
 DEFAULT_OPENROUTER = {
     "token_env": DEFAULT_OPENROUTER_TOKEN_ENV,
     "base_url": DEFAULT_OPENROUTER_BASE_URL,
@@ -850,11 +874,23 @@ def get_openrouter_settings() -> dict[str, Any]:
     # Every known agent gets an entry. The Settings form round-trips this map straight back on
     # save, so an agent missing here would return as the form's placeholder and overwrite the
     # model the admin had stored for it.
-    agents: dict[str, dict[str, str]] = {}
+    intel_raw = (
+        raw.get("intelligence_models")
+        if isinstance(raw.get("intelligence_models"), dict)
+        else {}
+    )
+    agents: dict[str, Any] = {}
     for agent_id in ordered_agent_ids():
         entry = agents_raw.get(agent_id) if isinstance(agents_raw.get(agent_id), dict) else {}
-        model = str(entry.get("model") or "").strip()
-        agents[agent_id] = {"model": model or fallback_model}
+        if agent_id in PIPELINE_LLM_AGENT_IDS:
+            models = _merge_agent_tier_models(entry, intel_raw, fallback_model)
+            agents[agent_id] = {
+                "model": models["balanced"]["model"],
+                "models": models,
+            }
+        else:
+            model = str(entry.get("model") or "").strip()
+            agents[agent_id] = {"model": model or fallback_model}
 
     token = get_openrouter_token()
     stored_base_url = _normalize_base_url(raw.get("base_url"))
@@ -908,6 +944,26 @@ def update_openrouter_settings(payload: dict[str, Any]) -> dict[str, Any]:
             agent_key = str(agent_id)
             if agent_key not in allowed_ids:
                 continue
+            if agent_key in PIPELINE_LLM_AGENT_IDS and isinstance(entry, dict):
+                models_payload = entry.get("models")
+                if isinstance(models_payload, dict):
+                    stored_models: dict[str, dict[str, str]] = {}
+                    for level in INTELLIGENCE_LEVELS:
+                        tier = models_payload.get(level)
+                        if isinstance(tier, dict):
+                            model = tier.get("model")
+                        else:
+                            model = tier
+                        if model is None or str(model).strip() == "":
+                            raise ValueError(
+                                f"agents.{agent_key}.models.{level}.model must be a non-empty string"
+                            )
+                        stored_models[level] = {"model": str(model).strip()}
+                    current["agents"][agent_key] = {
+                        "model": stored_models["balanced"]["model"],
+                        "models": stored_models,
+                    }
+                    continue
             if isinstance(entry, dict):
                 model = entry.get("model")
             else:
@@ -1541,8 +1597,16 @@ def get_active_provider_settings() -> dict[str, Any]:
     }
 
 
-def get_agent_model(agent_id: str) -> str:
+def get_intelligence_model(report_type: str | None) -> str:
+    """Deprecated: use get_agent_model(agent_id, intelligence_level=...)."""
+    return get_agent_model("orchester", intelligence_level=report_type)
+
+
+def get_agent_model(
+    agent_id: str, *, intelligence_level: str | None = None
+) -> str:
     from .agents import PHASE_AGENT_BY_ID, resolve_agent_definition_id
+    from .demo import _normalize_report_type
 
     lookup_id = resolve_agent_definition_id(agent_id)
     if lookup_id in PHASE_AGENT_BY_ID:
@@ -1551,7 +1615,15 @@ def get_agent_model(agent_id: str) -> str:
     agents = settings.get("agents") if isinstance(settings.get("agents"), dict) else {}
     entry = agents.get(lookup_id) or agents.get(agent_id)
     if isinstance(entry, dict):
-        model = str(entry.get("model") or "").strip()
-        if model and model != "auto":
-            return model
+        if intelligence_level:
+            level = _normalize_report_type(intelligence_level)
+            models = entry.get("models") if isinstance(entry.get("models"), dict) else {}
+            tier = models.get(level) if isinstance(models.get(level), dict) else {}
+            model = str(tier.get("model") or "").strip()
+            if model and model != "auto":
+                return model
+        else:
+            model = str(entry.get("model") or "").strip()
+            if model and model != "auto":
+                return model
     return provider_default_model(get_provider())

@@ -58,7 +58,9 @@ export default defineConfig({
     // Windows Docker bind mounts often miss native FS events.
     watch: {
       usePolling: true,
-      interval: 300,
+      interval: 2000,
+      binaryInterval: 5000,
+      ignored: ["**/node_modules/**", "**/.git/**", "**/dist/**"],
     },
     hmr: {
       clientPort: hmrClientPort,

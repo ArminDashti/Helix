@@ -351,19 +351,21 @@ def _effective_mode(mode: str) -> str:
 
 
 def _report_length_hint(level: str, language: str) -> str:
-    key = (level or "medium").strip().lower()
-    if key not in ("low", "medium", "high"):
-        key = "medium"
+    key = (level or "balanced").strip().lower()
+    if key == "medium":
+        key = "balanced"
+    if key not in ("low", "balanced", "high"):
+        key = "balanced"
     if language == "fa":
         mapping = {
             "low": "طول گزارش: حدود ۱ تا ۲ خط.",
-            "medium": "طول گزارش: حدود ۴ تا ۵ خط.",
+            "balanced": "طول گزارش: حدود ۴ تا ۵ خط.",
             "high": "طول گزارش: حدود ۸ تا ۹ خط.",
         }
     else:
         mapping = {
             "low": "Report length: about 1–2 lines.",
-            "medium": "Report length: about 4–5 lines.",
+            "balanced": "Report length: about 4–5 lines.",
             "high": "Report length: about 8–9 lines.",
         }
     return mapping[key]

@@ -15,6 +15,7 @@ from langgraph.graph import END, START, StateGraph
 
 from . import markdown_store as store
 from . import token_usage
+from .demo import _normalize_report_type
 from .llm_client import complete_chat_messages
 from .rag_context import select_rag_context
 
@@ -129,7 +130,11 @@ def _llm(
     fails — usage is recorded as soon as the reply lands, not when the run succeeds.
     """
     assistant = complete_chat_messages(
-        agent_id, messages, tools=tools, session_id=_session_id(ctx)
+        agent_id,
+        messages,
+        tools=tools,
+        session_id=_session_id(ctx),
+        intelligence_level=_normalize_report_type(ctx.get("report_type")),
     )
     usage = assistant.get("usage") if isinstance(assistant, dict) else None
     content = assistant.get("content") if isinstance(assistant, dict) else assistant
