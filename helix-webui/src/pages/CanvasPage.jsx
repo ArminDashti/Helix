@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { ClipboardCopy, FileDown, Upload } from "lucide-react";
 import IconButton from "../components/IconButton.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
-import { fetchBranding } from "../api/client.js";
+import { fetchBranding, fetchReportTemplates } from "../api/client.js";
 import { assetUrl } from "../utils/assetUrl.js";
 import {
   buildPdfHtml,
@@ -59,14 +61,35 @@ const inputClass =
 
 const TEXT_ALIGN_ELEMENTS = new Set(["title", "text", "footer"]);
 
+function previewDesignForTemplate(design, template) {
+  if (!template?.outputs) return design;
+  const outputs = template.outputs;
+  const withVisibility = (id, enabled) => ({
+    ...design.elements[id],
+    visible: Boolean(enabled) && design.elements[id]?.visible !== false,
+  });
+  return {
+    ...design,
+    elements: {
+      ...design.elements,
+      charts: withVisibility("charts", outputs.chart),
+      grid: withVisibility("grid", outputs.grid),
+      text: withVisibility("text", outputs.research),
+    },
+  };
+}
+
 export default function CanvasPage() {
   const { t, locale } = useI18n();
+  const { isAdmin } = useAuth();
   const [design, setDesign] = useState(() => loadPdfDesign());
   const [selectedElement, setSelectedElement] = useState(CANVAS_LAYOUT_ID);
   const [previewHtml, setPreviewHtml] = useState("");
   const [saving, setSaving] = useState(false);
   const [logoError, setLogoError] = useState(null);
   const [designNotice, setDesignNotice] = useState(null);
+  const [reportTemplates, setReportTemplates] = useState([]);
+  const [sampleTemplateId, setSampleTemplateId] = useState("");
 
   const pdfLabels = useMemo(
     () => ({
@@ -83,10 +106,24 @@ export default function CanvasPage() {
 
   const samplePrompt = t("canvas.samplePrompt");
   const sampleReport = t("canvas.sampleReport");
-  const previewPrompt = useMemo(
-    () => (design.reportTitleOverride || "").trim() || samplePrompt,
-    [design.reportTitleOverride, samplePrompt],
+  const selectedReportTemplate = useMemo(
+    () => reportTemplates.find((item) => item.id === sampleTemplateId) || null,
+    [reportTemplates, sampleTemplateId],
   );
+
+  const previewPrompt = useMemo(() => {
+    const override = (design.reportTitleOverride || "").trim();
+    if (override) return override;
+    const fromTemplate = (selectedReportTemplate?.prompt || "").trim();
+    if (fromTemplate) return fromTemplate;
+    return samplePrompt;
+  }, [design.reportTitleOverride, samplePrompt, selectedReportTemplate]);
+
+  const previewDesign = useMemo(
+    () => previewDesignForTemplate(design, selectedReportTemplate),
+    [design, selectedReportTemplate],
+  );
+
   const sampleGrid = locale === "fa" ? SAMPLE_GRID_FA : SAMPLE_GRID;
   const footerFallback = pdfLabels.pdfFooter;
 
@@ -98,6 +135,21 @@ export default function CanvasPage() {
       ),
     [design.orientation],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await fetchReportTemplates({ includeDisabled: isAdmin });
+        if (!cancelled) setReportTemplates(list || []);
+      } catch {
+        if (!cancelled) setReportTemplates([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin]);
 
   useEffect(() => {
     let cancelled = false;
@@ -149,16 +201,19 @@ export default function CanvasPage() {
       const sampleChart = renderSampleChartDataUrl(
         locale === "fa" ? "fa" : "en",
       );
+      const showChart =
+        !selectedReportTemplate?.outputs ||
+        Boolean(selectedReportTemplate.outputs.chart);
       const { html } = buildPdfHtml({
         prompt: previewPrompt,
         textReport: sampleReport,
         grid: sampleGrid,
-        chartImages: sampleChart ? [sampleChart] : [],
+        chartImages: showChart && sampleChart ? [sampleChart] : [],
         language: locale === "fa" ? "fa" : "en",
         labels: pdfLabels,
         logoDataUrl,
         companyLogoDataUrl,
-        design,
+        design: previewDesign,
         footerSampleText:
           (design.footerText || "").trim() || footerFallback,
       });
@@ -171,6 +226,8 @@ export default function CanvasPage() {
     design,
     locale,
     previewPrompt,
+    previewDesign,
+    selectedReportTemplate,
     sampleReport,
     sampleGrid,
     pdfLabels,
@@ -243,11 +300,14 @@ export default function CanvasPage() {
       const sampleChart = renderSampleChartDataUrl(
         locale === "fa" ? "fa" : "en",
       );
+      const showChart =
+        !selectedReportTemplate?.outputs ||
+        Boolean(selectedReportTemplate.outputs.chart);
       await exportResultPdf({
         prompt: previewPrompt,
         textReport: sampleReport,
         grid: sampleGrid,
-        chartImages: sampleChart ? [sampleChart] : [],
+        chartImages: showChart && sampleChart ? [sampleChart] : [],
         language: locale === "fa" ? "fa" : "en",
         labels: pdfLabels,
         logoUrl: assetUrl("helix-logo.png"),
@@ -255,7 +315,7 @@ export default function CanvasPage() {
           ? ""
           : assetUrl("company-logo.png"),
         locale,
-        design,
+        design: previewDesign,
       });
     } finally {
       setSaving(false);
@@ -445,6 +505,34 @@ export default function CanvasPage() {
                   }
                   className={inputClass}
                 />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="canvas_report_template"
+                  className="block text-sm font-medium text-ink"
+                >
+                  {t("canvas.reportTemplate")}
+                </label>
+                <select
+                  id="canvas_report_template"
+                  value={sampleTemplateId}
+                  onChange={(e) => setSampleTemplateId(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">{t("canvas.reportTemplateBuiltin")}</option>
+                  {reportTemplates.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name || item.id}
+                    </option>
+                  ))}
+                </select>
+                <Link
+                  to="/templates"
+                  className="mt-2 inline-block text-xs font-medium text-moss hover:underline"
+                >
+                  {t("canvas.manageReportTemplates")}
+                </Link>
               </div>
 
               <div>

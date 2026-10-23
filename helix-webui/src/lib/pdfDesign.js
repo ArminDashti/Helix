@@ -56,8 +56,18 @@ function createElementStyle(overrides = {}) {
 export function defaultElements() {
   return {
     header: createElementStyle({ paddingPx: 14, borderWidthPx: 1 }),
-    helixLogo: createElementStyle({ paddingPx: 8, fontSizePx: 14 }),
-    companyLogo: createElementStyle({ paddingPx: 8, fontSizePx: 14 }),
+    helixLogo: createElementStyle({
+      paddingPx: 8,
+      fontSizePx: 14,
+      logoHeightPx: 56,
+      logoMaxWidthPx: 160,
+    }),
+    companyLogo: createElementStyle({
+      paddingPx: 8,
+      fontSizePx: 14,
+      logoHeightPx: 56,
+      logoMaxWidthPx: 160,
+    }),
     title: createElementStyle({
       fontSizePx: 16,
       paddingPx: 8,
@@ -81,6 +91,7 @@ export function defaultElements() {
 
 export const DEFAULT_PDF_DESIGN = {
   orientation: "landscape",
+  helixLogoDataUrl: "",
   companyLogoDataUrl: "",
   footerText: "",
   reportTitleOverride: "",
@@ -127,6 +138,22 @@ function mergeElement(id, partial) {
     textAlign: TEXT_ALIGN_VALUES.has(partial.textAlign)
       ? partial.textAlign
       : base.textAlign,
+    ...(base.logoHeightPx !== undefined || partial.logoHeightPx !== undefined
+      ? {
+          logoHeightPx: clampInt(
+            partial.logoHeightPx ?? base.logoHeightPx,
+            16,
+            120,
+            56,
+          ),
+          logoMaxWidthPx: clampInt(
+            partial.logoMaxWidthPx ?? base.logoMaxWidthPx,
+            40,
+            320,
+            160,
+          ),
+        }
+      : {}),
   };
 }
 
@@ -149,6 +176,8 @@ export function normalizePdfDesign(raw = {}) {
   const next = {
     orientation:
       raw.orientation === "portrait" ? "portrait" : DEFAULT_PDF_DESIGN.orientation,
+    helixLogoDataUrl:
+      typeof raw.helixLogoDataUrl === "string" ? raw.helixLogoDataUrl : "",
     companyLogoDataUrl:
       typeof raw.companyLogoDataUrl === "string" ? raw.companyLogoDataUrl : "",
     footerText: typeof raw.footerText === "string" ? raw.footerText : "",
@@ -227,11 +256,13 @@ export function normalizePdfDesign(raw = {}) {
     }
   }
 
-  if (
-    typeof next.companyLogoDataUrl === "string" &&
-    next.companyLogoDataUrl.length > MAX_LOGO_DATA_URL_CHARS
-  ) {
-    next.companyLogoDataUrl = "";
+  for (const key of ["helixLogoDataUrl", "companyLogoDataUrl"]) {
+    if (
+      typeof next[key] === "string" &&
+      next[key].length > MAX_LOGO_DATA_URL_CHARS
+    ) {
+      next[key] = "";
+    }
   }
 
   return next;

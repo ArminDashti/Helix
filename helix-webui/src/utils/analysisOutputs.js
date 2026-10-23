@@ -30,3 +30,34 @@ export function wantsGrid(outputs) {
 export function wantsResearch(outputs) {
   return Boolean(outputs?.research);
 }
+
+/**
+ * Append optional section prompts and grid sort hints to the main prompt.
+ * @param {string} main
+ * @param {{
+ *   research?: string,
+ *   grid?: string,
+ *   chart?: string,
+ *   gridSortColumn?: string,
+ *   gridSortDir?: string,
+ * }} extras
+ */
+export function composeRunPrompt(main, extras = {}) {
+  const base = String(main || "").trim();
+  const blocks = [];
+  const research = String(extras.research || "").trim();
+  const grid = String(extras.grid || "").trim();
+  const chart = String(extras.chart || "").trim();
+  const sortCol = String(extras.gridSortColumn || "").trim();
+  const sortDir = String(extras.gridSortDir || "ASC").trim().toUpperCase();
+
+  if (research) blocks.push(`Research instructions:\n${research}`);
+  if (grid) blocks.push(`Grid instructions:\n${grid}`);
+  if (chart) blocks.push(`Chart instructions:\n${chart}`);
+  if (sortCol) {
+    blocks.push(`Sort the result grid by "${sortCol}" ${sortDir === "DESC" ? "DESC" : "ASC"}.`);
+  }
+  if (!blocks.length) return base;
+  return `${base}\n\n---\n${blocks.join("\n\n")}`;
+}
+

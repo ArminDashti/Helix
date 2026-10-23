@@ -17,6 +17,8 @@ FORBIDDEN_SQL = re.compile(
 
 ALLOWED_LIMITS = {1, 2, 3, 4, 5, 16, 32, 64, 128}
 
+GROUP_COUNT_ALIAS = "row_count"
+
 ENGINE_ALIASES = {
     "postgresql": "postgresql",
     "postgres": "postgresql",
@@ -69,6 +71,34 @@ def validate_order_column(column: str, columns: list[str] | None = None) -> str:
     if columns and col not in columns and col.lower() not in {c.lower() for c in columns}:
         raise ValueError(f"Unknown ORDER BY column: {col}")
     return col
+
+
+def resolve_output_columns(
+    select_columns: list[str] | str | None,
+    all_columns: list[str],
+) -> list[str]:
+    if not all_columns:
+        return []
+    if select_columns is None:
+        return list(all_columns)
+    if isinstance(select_columns, str):
+        raw = [select_columns] if select_columns.strip() else []
+    else:
+        raw = [str(c).strip() for c in select_columns if str(c).strip()]
+    if not raw:
+        return list(all_columns)
+    if len(raw) == 1 and raw[0] == "*":
+        return list(all_columns)
+    lower_map = {c.lower(): c for c in all_columns}
+    resolved: list[str] = []
+    for name in raw:
+        key = name.lower()
+        if key not in lower_map:
+            raise ValueError(f"Unknown column: {name}")
+        canonical = lower_map[key]
+        if canonical not in resolved:
+            resolved.append(canonical)
+    return resolved
 
 
 def _looks_like_id_column(name: str) -> bool:

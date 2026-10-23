@@ -6,6 +6,7 @@ import { formatDateTime } from "../i18n/format.js";
 import { hasPersianScript } from "../utils/textDirection.js";
 import {
   DEFAULT_PDF_DESIGN,
+  a4PageCssPx,
   elementStyle,
   loadPdfDesign,
   normalizeCustomElement,
@@ -156,6 +157,29 @@ export function renderSampleChartDataUrl(language = "en") {
   }
 }
 
+
+function logoImageCss(el) {
+  const h = Math.min(120, Math.max(16, Number(el.logoHeightPx) || 56));
+  const mw = Math.min(320, Math.max(40, Number(el.logoMaxWidthPx) || 160));
+  return `height:${h}px;width:auto;max-width:${mw}px;object-fit:contain;`;
+}
+
+function footerBarInnerHtml(prefs, footerText, exportedAt, footerPageLabel) {
+  const showDate = prefs.footerShowDate !== false;
+  const showPages = prefs.footerShowPageNumbers !== false;
+  const left =
+    showDate && exportedAt ? escapeHtml(exportedAt) : "&nbsp;";
+  const center = footerText || "";
+  const right =
+    showPages && footerPageLabel ? escapeHtml(footerPageLabel) : "&nbsp;";
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;direction:ltr;"><span style="flex:0 1 auto;min-width:0;white-space:nowrap;">${left}</span><span style="flex:1;text-align:center;min-width:0;">${center}</span><span style="flex:0 1 auto;min-width:0;white-space:nowrap;text-align:right;">${right}</span></div>`;
+}
+
+async function resolveHelixLogoDataUrl(prefs, logoUrl) {
+  if (prefs?.helixLogoDataUrl) return prefs.helixLogoDataUrl;
+  return loadLogoDataUrl(logoUrl);
+}
+
 function cssBox(el, extra = "") {
   const bw = el.borderWidthPx || 0;
   const borderColor =
@@ -194,6 +218,8 @@ export function buildPdfHtml({
   design = DEFAULT_PDF_DESIGN,
   footerSampleText = "",
   includeFooter = true,
+  exportedAt = "",
+  footerPageLabel = "",
 }) {
   const prefs = normalizePdfDesign(design);
   const dir = resolveDir(language, textReport || prompt);
@@ -214,11 +240,11 @@ export function buildPdfHtml({
 
   const logoImgInline =
     headerEl.visible && helixEl.visible && safeLogoUrl
-      ? `<div data-canvas-element="helixLogo" style="${cssBox(helixEl)}display:flex;align-items:center;"><img style="height:56px;width:auto;max-width:160px;object-fit:contain;" src="${safeLogoUrl}" alt="${escapeHtml(labels.pdfLogoAlt)}" /></div>`
+      ? `<div data-canvas-element="helixLogo" style="${cssBox(helixEl)}display:flex;align-items:center;"><img style="${logoImageCss(helixEl)}" src="${safeLogoUrl}" alt="${escapeHtml(labels.pdfLogoAlt)}" /></div>`
       : "";
   const companyLogoImgInline =
     headerEl.visible && companyEl.visible && safeCompanyLogoUrl
-      ? `<div data-canvas-element="companyLogo" style="${cssBox(companyEl)}display:flex;align-items:center;justify-content:flex-end;"><img style="height:56px;width:auto;max-width:160px;object-fit:contain;" src="${safeCompanyLogoUrl}" alt="${escapeHtml(labels.pdfCompanyLogoAlt)}" /></div>`
+      ? `<div data-canvas-element="companyLogo" style="${cssBox(companyEl)}display:flex;align-items:center;justify-content:flex-end;"><img style="${logoImageCss(companyEl)}" src="${safeCompanyLogoUrl}" alt="${escapeHtml(labels.pdfCompanyLogoAlt)}" /></div>`
       : "";
   const titleInline =
     headerEl.visible && titleEl.visible
@@ -306,13 +332,15 @@ export function buildPdfHtml({
     footerEl.borderColor && /^#[0-9a-fA-F]{6}$/.test(footerEl.borderColor)
       ? footerEl.borderColor
       : "#1e3a5f";
-  const footerAlign =
-    footerEl.textAlign && footerEl.textAlign !== "inherit"
-      ? footerEl.textAlign
-      : "center";
+  const footerInner = footerBarInnerHtml(
+    prefs,
+    footerText,
+    exportedAt,
+    footerPageLabel,
+  );
   const footerInline =
     includeFooter && footerEl.visible
-      ? `<div data-canvas-element="footer" style="${cssBox(footerEl, `margin-top:14px;border-top:${footerDividerPx}px solid ${footerDividerColor};text-align:${footerAlign};`)}">${footerText}</div>`
+      ? `<div data-canvas-element="footer" style="${cssBox(footerEl, `margin-top:auto;flex-shrink:0;border-top:${footerDividerPx}px solid ${footerDividerColor};`)}">${footerInner}</div>`
       : "";
 
   const customInline = (prefs.customElements || [])
@@ -335,8 +363,11 @@ export function buildPdfHtml({
   const pagePad = Math.min(24, Math.max(8, Number(prefs.pageMarginMm) || 12));
   const padPx = Math.round(pagePad * (96 / 25.4));
   const bodyInline = `${articleInline}${gridInline}${chartImgInline}${customInline}`;
+  const orient = prefs.orientation === "portrait" ? "portrait" : "landscape";
+  const { width: pageWidthPx, height: pageHeightPx } = a4PageCssPx(orient);
+  const mainColumn = `<div style="display:flex;flex-direction:column;flex:1;min-height:${pageHeightPx - padPx * 2}px;width:100%;box-sizing:border-box;">${headerInline}<div style="flex:1;display:flex;flex-direction:column;min-height:0;">${bodyInline}</div>${footerInline}</div>`;
   return {
-    html: `<div style="font-family:${rootFont.fontFamily};color:#111;background:${prefs.pageBackgroundColor || "#fff"};padding:${padPx}px;box-sizing:border-box;min-height:100%;">${headerInline}${bodyInline}${footerInline}</div>`,
+    html: `<div style="font-family:${rootFont.fontFamily};color:#111;background:${prefs.pageBackgroundColor || "#fff"};padding:${padPx}px;box-sizing:border-box;width:${pageWidthPx}px;min-height:${pageHeightPx}px;display:flex;flex-direction:column;">${mainColumn}</div>`,
     dir,
     lang,
   };
@@ -494,7 +525,9 @@ export async function exportResultPdf({
         if (prefs.footerShowDate) {
           pdf.text(exportedAt, MARGIN, textY, { align: "left" });
         }
-        pdf.text(footerLabel, A4_W / 2, textY, { align: "center" });
+        if (footerLabel) {
+          pdf.text(footerLabel, A4_W / 2, textY, { align: "center" });
+        }
         if (prefs.footerShowPageNumbers) {
           pdf.text(`${pageNum}/${totalPages}`, A4_W - MARGIN, textY, {
             align: "right",

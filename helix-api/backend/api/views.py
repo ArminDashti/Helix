@@ -987,6 +987,15 @@ def db_explorer_query(request: HttpRequest) -> JsonResponse:
     except (TypeError, ValueError):
         return _error("limit must be an integer")
 
+    raw_select_columns = payload.get("select_columns")
+    select_columns = None
+    if isinstance(raw_select_columns, list):
+        select_columns = [
+            str(c).strip() for c in raw_select_columns if str(c).strip()
+        ]
+    elif isinstance(raw_select_columns, str) and raw_select_columns.strip():
+        select_columns = raw_select_columns.strip()
+
     try:
         result = db_sql.select_rows(
             table=str(payload.get("table") or ""),
@@ -995,6 +1004,8 @@ def db_explorer_query(request: HttpRequest) -> JsonResponse:
             where=str(payload.get("where") or ""),
             order_by=str(payload.get("order_by") or ""),
             sort=str(payload.get("sort") or "ASC"),
+            select_columns=select_columns,
+            group_by=str(payload.get("group_by") or ""),
         )
     except ValueError as exc:
         _record_log_error(

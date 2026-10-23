@@ -7,9 +7,11 @@ from typing import Any
 from ..config_loader import database_to_connection_string, get_database_settings
 from .base import (
     ALLOWED_LIMITS,
+    GROUP_COUNT_ALIAS,
     cell_value,
     parse_table_name,
     prefer_id_order_column,
+    resolve_output_columns,
     validate_order_column,
     validate_where,
 )
@@ -168,6 +170,8 @@ def select_rows(
     where: str = "",
     order_by: str = "",
     sort: str = "ASC",
+    select_columns: list[str] | str | None = None,
+    group_by: str = "",
 ) -> dict[str, Any]:
     if limit not in ALLOWED_LIMITS:
         raise ValueError("limit must be one of 1, 2, 3, 4, 5, 16, 32, 64, 128")
@@ -185,6 +189,48 @@ def select_rows(
         raise ValueError(f"No columns found for {schema}.{name}")
 
     where_clause = validate_where(where)
+    target = fqn(schema, name)
+    group_col = (
+        validate_order_column(group_by, columns) if (group_by or "").strip() else ""
+    )
+
+    if group_col:
+        count_ident = quote_ident(GROUP_COUNT_ALIAS)
+        sql = (
+            f"SELECT {quote_ident(group_col)}, COUNT(*) AS {count_ident} "
+            f"FROM {target}"
+        )
+        if where_clause:
+            sql += f" WHERE {where_clause}"
+        sql += (
+            f" GROUP BY {quote_ident(group_col)} "
+            f"ORDER BY {count_ident} DESC LIMIT {int(limit)}"
+        )
+        out_columns = [group_col, GROUP_COUNT_ALIAS]
+        with connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql)
+                raw_rows = cur.fetchall()
+        rows = [
+            dict(zip(out_columns, [cell_value(v) for v in row]))
+            for row in raw_rows
+        ]
+        if position == "tail":
+            rows.reverse()
+        return {
+            "table": f"{schema}.{name}",
+            "limit": limit,
+            "position": position,
+            "where": where_clause,
+            "group_by": group_col,
+            "order_by": group_col,
+            "sort": sort_dir,
+            "sql": sql,
+            "columns": out_columns,
+            "rows": rows,
+            "row_count": len(rows),
+        }
+
     order_col = validate_order_column(order_by, columns)
     if not order_col:
         order_col = prefer_id_order_column(col_metas) or columns[0]
@@ -193,8 +239,8 @@ def select_rows(
     if position == "tail":
         effective_sort = "DESC" if sort_dir == "ASC" else "ASC"
 
-    select_list = ", ".join(quote_ident(c) for c in columns)
-    target = fqn(schema, name)
+    out_columns = resolve_output_columns(select_columns, columns)
+    select_list = ", ".join(quote_ident(c) for c in out_columns)
     sql = f"SELECT {select_list} FROM {target}"
     if where_clause:
         sql += f" WHERE {where_clause}"
@@ -205,7 +251,9 @@ def select_rows(
             cur.execute(sql)
             raw_rows = cur.fetchall()
 
-    rows = [dict(zip(columns, [cell_value(v) for v in row])) for row in raw_rows]
+    rows = [
+        dict(zip(out_columns, [cell_value(v) for v in row])) for row in raw_rows
+    ]
     if position == "tail":
         rows.reverse()
 
@@ -217,7 +265,7 @@ def select_rows(
         "order_by": order_col,
         "sort": sort_dir,
         "sql": sql,
-        "columns": columns,
+        "columns": out_columns,
         "rows": rows,
         "row_count": len(rows),
     }
@@ -235,4 +283,3 @@ def set_column_sql_description(
         with conn.cursor() as cur:
             cur.execute(f"COMMENT ON COLUMN {target} IS %s", (text,))
         conn.commit()
-

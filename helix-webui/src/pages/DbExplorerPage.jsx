@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Database, Play } from "lucide-react";
+import { Database, Play } from "lucide-react";
 import {
   fetchDbExplorerColumns,
   fetchDbExplorerTables,
@@ -20,8 +20,16 @@ const OBJECT_KINDS = [
   { value: "views", labelKey: "dbExplorer.kindViews" },
 ];
 
+const CLAUSE_MODES = [
+  { value: "order", labelKey: "dbExplorer.clauseOrder" },
+  { value: "group", labelKey: "dbExplorer.clauseGroup" },
+];
+
+const controlClass =
+  "h-10 w-full rounded-xl border border-line bg-fog/40 px-3 text-sm outline-none focus:border-moss";
+
 export default function DbExplorerPage() {
-  const { t, locale } = useI18n();
+  const { t, locale, dir } = useI18n();
   const [objectKind, setObjectKind] = useState("tables");
   const [tables, setTables] = useState([]);
   const [table, setTable] = useState("");
@@ -29,8 +37,9 @@ export default function DbExplorerPage() {
   const [limit, setLimit] = useState(32);
   const [position, setPosition] = useState("top");
   const [where, setWhere] = useState("");
-  const [orderBy, setOrderBy] = useState("");
-  const [sort, setSort] = useState("ASC");
+  const [clauseMode, setClauseMode] = useState("order");
+  const [clauseColumn, setClauseColumn] = useState("");
+  const [outputColumn, setOutputColumn] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -90,7 +99,10 @@ export default function DbExplorerPage() {
           compareAz(a.name, b.name, locale),
         );
         setColumns(cols);
-        setOrderBy(preferIdOrderColumn(data.columns || cols) || cols[0]?.name || "");
+        setClauseColumn(
+          preferIdOrderColumn(data.columns || cols) || cols[0]?.name || "",
+        );
+        setOutputColumn("");
       } catch {
         if (!cancelled) setColumns([]);
       }
@@ -110,14 +122,22 @@ export default function DbExplorerPage() {
     setRunning(true);
     setError(null);
     try {
-      const data = await runDbExplorerQuery({
+      const payload = {
         table,
         limit,
         position,
         where,
-        order_by: orderBy,
-        sort,
-      });
+        sort: "ASC",
+      };
+      if (clauseMode === "group") {
+        payload.group_by = clauseColumn;
+      } else {
+        payload.order_by = clauseColumn;
+      }
+      if (outputColumn) {
+        payload.select_columns = [outputColumn];
+      }
+      const data = await runDbExplorerQuery(payload);
       setResult(data);
     } catch (err) {
       setResult(null);
@@ -155,7 +175,7 @@ export default function DbExplorerPage() {
               value={objectKind}
               onChange={(e) => setObjectKind(e.target.value)}
               aria-label={t("dbExplorer.objectType")}
-              className="h-10 w-full min-w-[9rem] rounded-xl border border-line bg-fog/40 px-3 text-sm outline-none focus:border-moss"
+              className={`${controlClass} min-w-[9rem]`}
             >
               {OBJECT_KINDS.map((k) => (
                 <option key={k.value} value={k.value}>
@@ -175,60 +195,58 @@ export default function DbExplorerPage() {
             />
           </div>
 
-          <fieldset
-            className="shrink-0 text-sm"
-            aria-label={t("dbExplorer.rows")}
-          >
-            <div className="flex flex-wrap gap-2">
-              {LIMITS.map((n) => (
-                <IconButton
-                  key={n}
-                  type="button"
-                  icon={Database}
-                  onClick={() => setLimit(n)}
-                  className={[
-                    "h-10 rounded-lg border px-3 text-xs font-semibold",
-                    limit === n
-                      ? "border-moss bg-moss text-white"
-                      : "border-line bg-fog/40 text-ink hover:bg-fog",
-                  ].join(" ")}
-                >
-                  {n}
-                </IconButton>
-              ))}
-            </div>
-          </fieldset>
+          <div className="block min-w-[6rem] shrink-0 text-sm">
+            <select
+              value={position}
+              onChange={(e) => setPosition(e.target.value)}
+              aria-label={t("dbExplorer.position")}
+              className={controlClass}
+            >
+              <option value="top">{t("dbExplorer.positionTop")}</option>
+              <option value="tail">{t("dbExplorer.positionTail")}</option>
+            </select>
+          </div>
 
-          <fieldset
-            className="shrink-0 text-sm"
-            aria-label={t("dbExplorer.position")}
-          >
-            <div className="flex gap-2">
-              {["top", "tail"].map((pos) => (
-                <IconButton
-                  key={pos}
-                  type="button"
-                  icon={pos === "top" ? ArrowUp : ArrowDown}
-                  onClick={() => setPosition(pos)}
-                  className={[
-                    "h-10 rounded-lg border px-3 text-xs font-semibold capitalize",
-                    position === pos
-                      ? "border-moss bg-moss text-white"
-                      : "border-line bg-fog/40 text-ink hover:bg-fog",
-                  ].join(" ")}
-                >
-                  {positionLabel(pos)}
-                </IconButton>
+          <div className="block min-w-[5rem] shrink-0 text-sm">
+            <select
+              value={limit}
+              onChange={(e) => setLimit(Number(e.target.value))}
+              aria-label={t("dbExplorer.rows")}
+              className={controlClass}
+            >
+              {LIMITS.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
               ))}
-            </div>
-          </fieldset>
+            </select>
+          </div>
 
           <div className="block min-w-[8rem] shrink-0 text-sm">
             <select
-              value={orderBy}
-              onChange={(e) => setOrderBy(e.target.value)}
-              aria-label={t("dbExplorer.orderBy")}
-              className="h-10 w-full rounded-xl border border-line bg-fog/40 px-3 text-sm outline-none focus:border-moss"
+              value={clauseMode}
+              onChange={(e) => setClauseMode(e.target.value)}
+              aria-label={t("dbExplorer.clauseMode")}
+              className={controlClass}
+            >
+              {CLAUSE_MODES.map((mode) => (
+                <option key={mode.value} value={mode.value}>
+                  {t(mode.labelKey)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="block min-w-[8rem] shrink-0 text-sm">
+            <select
+              value={clauseColumn}
+              onChange={(e) => setClauseColumn(e.target.value)}
+              aria-label={
+                clauseMode === "group"
+                  ? t("dbExplorer.clauseGroup")
+                  : t("dbExplorer.clauseOrder")
+              }
+              className={controlClass}
             >
               {columnNames.length === 0 ? (
                 <option value="">{t("common.noneDash")}</option>
@@ -242,15 +260,20 @@ export default function DbExplorerPage() {
             </select>
           </div>
 
-          <div className="block min-w-[6rem] shrink-0 text-sm">
+          <div className="block min-w-[8rem] shrink-0 text-sm">
             <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value)}
-              aria-label={t("dbExplorer.sort")}
-              className="h-10 w-full rounded-xl border border-line bg-fog/40 px-3 text-sm outline-none focus:border-moss"
+              value={outputColumn}
+              onChange={(e) => setOutputColumn(e.target.value)}
+              aria-label={t("dbExplorer.columns")}
+              className={controlClass}
+              disabled={clauseMode === "group"}
             >
-              <option value="ASC">{t("dbExplorer.sortAsc")}</option>
-              <option value="DESC">{t("dbExplorer.sortDesc")}</option>
+              <option value="">{t("dbExplorer.allColumns")}</option>
+              {columnNames.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -259,8 +282,8 @@ export default function DbExplorerPage() {
               value={where}
               onChange={(e) => setWhere(e.target.value)}
               placeholder={t("dbExplorer.wherePlaceholder")}
-              aria-label={t("dbExplorer.where")}
-              className="h-10 w-full rounded-xl border border-line bg-fog/40 px-3 font-mono text-[13px] outline-none focus:border-moss"
+              aria-label={t("dbExplorer.additionalWhere")}
+              className={`${controlClass} font-mono text-[13px]`}
             />
           </div>
 
@@ -294,12 +317,12 @@ export default function DbExplorerPage() {
               {result.sql}
             </code>
           </div>
-          <div dir="ltr" className="min-h-0 flex-1 overflow-auto rounded-xl border border-line">
-            <table className="min-w-full text-center font-sans text-sm">
+          <div dir={dir} className="min-h-0 flex-1 overflow-auto rounded-xl border border-line">
+            <table className="min-w-full text-start font-sans text-sm">
               <thead className="sticky top-0 bg-fog/80 text-xs uppercase tracking-wide text-muted backdrop-blur">
                 <tr>
                   {(result.columns || []).map((c) => (
-                    <th key={c} className="whitespace-nowrap px-3 py-2 text-center font-semibold">
+                    <th key={c} className="whitespace-nowrap px-3 py-2 text-start font-semibold">
                       {c}
                     </th>
                   ))}
@@ -309,7 +332,7 @@ export default function DbExplorerPage() {
                 {(result.rows || []).map((row, idx) => (
                   <tr key={idx} className="border-t border-line/70">
                     {(result.columns || []).map((c) => (
-                      <td key={c} className="whitespace-nowrap px-3 py-1.5 text-center font-sans text-[12px]">
+                      <td key={c} className="whitespace-nowrap px-3 py-1.5 text-start font-sans text-[12px]">
                         {row[c] === null || row[c] === undefined ? (
                           <span className="text-muted">{t("dbExplorer.null")}</span>
                         ) : (
@@ -327,6 +350,16 @@ export default function DbExplorerPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
 
 
 

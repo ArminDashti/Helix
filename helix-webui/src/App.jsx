@@ -21,7 +21,6 @@ import LogsPage from "./pages/LogsPage.jsx";
 import KnowledgePage from "./pages/KnowledgePage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
-import HelpPage from "./pages/HelpPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import SkillsPage from "./pages/SkillsPage.jsx";
 
@@ -74,8 +73,8 @@ export default function App() {
                 </RequireAuth>
               }
             />
-            <Route path="help" element={<HelpPage />} />
-            <Route path="about-me" element={<Navigate to="/help?tab=about" replace />} />
+            <Route path="help" element={<Navigate to="/settings?tab=help" replace />} />
+            <Route path="about-me" element={<Navigate to="/settings?tab=about" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
@@ -86,6 +85,8 @@ export default function App() {
     </BrowserRouter>
   );
 }
+
+
 
 
 

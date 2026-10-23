@@ -281,7 +281,7 @@ function LogsList() {
 
 function LogDetail({ logId }) {
   const navigate = useNavigate();
-  const { t, locale } = useI18n();
+  const { t, locale, dir } = useI18n();
   const [record, setRecord] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -443,17 +443,17 @@ function LogDetail({ logId }) {
               <DetailField label={t("logs.fieldNodeId")} value={record.node_id} />
             </dl>
             {steps.length > 0 ? (
-              <div dir="ltr" className="mt-4 overflow-x-auto">
-                <table className="min-w-full border-collapse text-center text-sm">
+              <div dir={dir} className="mt-4 overflow-x-auto">
+                <table className="min-w-full border-collapse text-start text-sm">
                   <thead>
                     <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
-                      <th className="px-2 py-2 text-center font-semibold">
+                      <th className="px-2 py-2 text-start font-semibold">
                         {t("logs.colStepAgent")}
                       </th>
-                      <th className="px-2 py-2 text-center font-semibold">
+                      <th className="px-2 py-2 text-start font-semibold">
                         {t("logs.colStepStatus")}
                       </th>
-                      <th className="px-2 py-2 text-center font-semibold">
+                      <th className="px-2 py-2 text-start font-semibold">
                         {t("logs.colStepMessage")}
                       </th>
                     </tr>
@@ -464,13 +464,13 @@ function LogDetail({ logId }) {
                         key={`${step.node_id || step.agent_id || "step"}-${index}`}
                         className="border-b border-line/60 align-top"
                       >
-                        <td className="px-2 py-2 text-center font-mono text-xs text-ink">
+                        <td className="px-2 py-2 text-start font-mono text-xs text-ink">
                           {step.node_id || step.agent_id || t("common.noneDash")}
                         </td>
-                        <td className="px-2 py-2 text-center">
+                        <td className="px-2 py-2 text-start">
                           <StepStatusBadge status={step.status} t={t} />
                         </td>
-                        <td className="px-2 py-2 text-center whitespace-pre-wrap text-ink">
+                        <td className="px-2 py-2 text-start whitespace-pre-wrap text-ink">
                           {step.message || t("common.noneDash")}
                         </td>
                       </tr>

@@ -11,11 +11,10 @@ import {
   CircleDot,
   Globe,
   Play,
-  Search,
-  Table2,
   Zap,
 } from "lucide-react";
 import { fetchAgents, streamRun, answerRun, createResult } from "../api/client.js";
+import AnalysisSection from "../components/AnalysisSection.jsx";
 import ErrorModal from "../components/ErrorModal.jsx";
 import GridColumnInput from "../components/GridColumnInput.jsx";
 import IconButton from "../components/IconButton.jsx";
@@ -25,15 +24,26 @@ import { useI18n } from "../context/I18nContext.jsx";
 import { translateKnownMessage } from "../i18n/apiErrors.js";
 import { readStoredLocale } from "../i18n/applyLocale.js";
 import { translate } from "../i18n/messages.js";
+import { consumeAnalysisPrefill } from "../lib/analysisPrefill.js";
 import {
+  composeRunPrompt,
   deriveApiMode,
   wantsChart,
   wantsGrid,
 } from "../utils/analysisOutputs.js";
 import { agentCompanyLabel } from "../utils/agentLabel.js";
 import { textDirection, textLang } from "../utils/textDirection.js";
+
 const languageSelectClass =
   "min-w-[9rem] cursor-pointer appearance-none rounded-xl border border-line bg-fog/40 py-2.5 pe-9 ps-9 text-sm font-medium text-ink outline-none ring-moss/30 transition hover:bg-fog focus:border-moss focus:ring-2";
+
+const textareaClass =
+  "min-h-[5rem] w-full resize-y rounded-xl border border-line/80 bg-fog/25 px-4 py-3 text-[15px] leading-relaxed text-ink outline-none ring-moss/30 transition focus:border-moss focus:ring-2";
+
+const extraPromptClass = `${textareaClass} min-h-[4.5rem] text-sm`;
+
+const sortSelectClass =
+  "rounded-xl border border-line bg-fog/40 px-3 py-2 text-sm text-ink outline-none focus:border-moss focus:ring-2 focus:ring-moss/30";
 
 const CHART_TYPE_META = [
   { value: "bar", icon: BarChart3, labelKey: "analysis.chartBar" },
@@ -84,15 +94,6 @@ function chartIconBtnClass(pressed, atCap) {
   ].join(" ");
 }
 
-function ToolbarDivider() {
-  return (
-    <div
-      className="hidden h-9 w-px shrink-0 bg-line/70 sm:block"
-      aria-hidden="true"
-    />
-  );
-}
-
 export default function AnalysisPage() {
   const navigate = useNavigate();
   const { health, checkConnection } = useApiStatus();
@@ -105,6 +106,11 @@ export default function AnalysisPage() {
   const [reportType, setReportType] = useState("low");
   const [chartTypesSelected, setChartTypesSelected] = useState(["bar"]);
   const [gridColumns, setGridColumns] = useState([]);
+  const [gridSortColumn, setGridSortColumn] = useState("");
+  const [gridSortDir, setGridSortDir] = useState("ASC");
+  const [researchPrompt, setResearchPrompt] = useState("");
+  const [gridPrompt, setGridPrompt] = useState("");
+  const [chartPrompt, setChartPrompt] = useState("");
   const [allowOperatorQuestions, setAllowOperatorQuestions] = useState(false);
   const [error, setError] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -120,15 +126,6 @@ export default function AnalysisPage() {
   const [llmError, setLlmError] = useState(null);
   const abortRef = useRef(null);
   const answerResolveRef = useRef(null);
-
-  const outputToggles = useMemo(
-    () => [
-      { key: "chart", label: t("analysis.modeChart"), icon: BarChart3 },
-      { key: "grid", label: t("analysis.modeGrid"), icon: Table2 },
-      { key: "research", label: t("analysis.modeResearch"), icon: Search },
-    ],
-    [t],
-  );
 
   const outputLanguages = useMemo(
     () => [
@@ -163,6 +160,32 @@ export default function AnalysisPage() {
   }, []);
 
   useEffect(() => {
+    const prefill = consumeAnalysisPrefill();
+    if (!prefill) return;
+    if (typeof prefill.prompt === "string" && prefill.prompt.trim()) {
+      setPrompt(prefill.prompt);
+    }
+    if (prefill.outputs && typeof prefill.outputs === "object") {
+      setOutputs({ ...DEFAULT_OUTPUTS, ...prefill.outputs });
+    }
+    if (typeof prefill.report_type === "string") {
+      setReportType(prefill.report_type);
+    }
+    if (Array.isArray(prefill.chart_types) && prefill.chart_types.length) {
+      setChartTypesSelected(prefill.chart_types.slice(0, 4));
+    }
+    if (Array.isArray(prefill.grid_columns)) {
+      setGridColumns(prefill.grid_columns.filter(Boolean));
+    }
+    if (typeof prefill.language === "string") {
+      setOutputLanguage(prefill.language);
+    }
+    if (prefill.allow_operator_questions != null) {
+      setAllowOperatorQuestions(Boolean(prefill.allow_operator_questions));
+    }
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
@@ -182,21 +205,24 @@ export default function AnalysisPage() {
     };
   }, []);
 
-  function selectOutputMode(key) {
-    setOutputs({
-      chart: key === "chart",
-      grid: key === "grid",
-      research: key === "research",
-    });
+  function setOutputEnabled(key, enabled) {
+    setOutputs((prev) => ({ ...prev, [key]: enabled }));
   }
 
   async function handleRun(event) {
     event.preventDefault();
-    const trimmed = prompt.trim();
-    if (!trimmed) {
+    const mainTrimmed = prompt.trim();
+    if (!mainTrimmed) {
       setError(t("analysis.promptRequired"));
       return;
     }
+    const trimmed = composeRunPrompt(mainTrimmed, {
+      research: outputs.research ? researchPrompt : "",
+      grid: outputs.grid ? gridPrompt : "",
+      chart: outputs.chart ? chartPrompt : "",
+      gridSortColumn: outputs.grid ? gridSortColumn : "",
+      gridSortDir,
+    }).trim();
     const apiMode = deriveApiMode(outputs);
     if (!apiMode) {
       setError(t("analysis.outputRequired"));
@@ -382,8 +408,9 @@ export default function AnalysisPage() {
   }
 
   const promptDir = textDirection(prompt);
-  const showChart = wantsChart(outputs);
-  const showGrid = wantsGrid(outputs);
+  const chartEnabled = wantsChart(outputs);
+  const gridEnabled = wantsGrid(outputs);
+  const researchEnabled = Boolean(outputs.research);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -396,160 +423,210 @@ export default function AnalysisPage() {
         onSubmit={handleRun}
         className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-line/70 bg-paper/50 p-4 shadow-[0_24px_60px_-32px_rgba(0,0,0,0.55)] backdrop-blur-sm sm:p-5"
       >
-        <div className="flex min-h-0 flex-1 flex-col gap-2">
-          <label htmlFor="prompt" className="text-xs font-medium uppercase tracking-wide text-muted">
-            {t("analysis.prompt")}
-          </label>
-          <textarea
-            id="prompt"
-            value={prompt}
-            dir={promptDir}
-            lang={textLang(prompt)}
-            onChange={(e) => setPrompt(e.target.value)}
-            className="min-h-[8.5rem] w-full flex-1 resize-y rounded-2xl border border-line/80 bg-fog/25 px-4 py-3.5 text-[15px] leading-relaxed text-ink outline-none ring-moss/30 transition focus:border-moss focus:ring-2"
-            placeholder={t("analysis.promptPlaceholder")}
-          />
-        </div>
-
-        <div className="space-y-3 border-t border-line/50 pt-3">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <div
-              className={segmentShellClass()}
-              role="radiogroup"
-              aria-label={t("analysis.outputs")}
-            >
-              {outputToggles.map((item) => {
-                const selected = Boolean(outputs[item.key]);
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    onClick={() => selectOutputMode(item.key)}
-                    className={segmentBtnClass(selected)}
-                  >
-                    <Icon className="size-4 shrink-0" aria-hidden="true" />
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <ToolbarDivider />
-
-            <div
-              className={segmentShellClass()}
-              role="group"
-              aria-label={t("analysis.speed")}
-            >
-              {speedLevels.map((item) => {
-                const pressed = reportType === item.value;
-                const SpeedIcon = item.icon;
-                return (
-                  <button
-                    key={item.value}
-                    type="button"
-                    aria-pressed={pressed}
-                    onClick={() => setReportType(item.value)}
-                    className={segmentBtnClass(pressed)}
-                  >
-                    {SpeedIcon ? (
-                      <SpeedIcon className="size-4 shrink-0" aria-hidden="true" />
-                    ) : null}
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <ToolbarDivider />
-
-            <div className="relative shrink-0">
-              <label htmlFor="output_language" className="sr-only">
-                {t("analysis.outputLanguage")}
-              </label>
-              <Globe
-                className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted"
-                aria-hidden="true"
-              />
-              <select
-                id="output_language"
-                value={outputLanguage}
-                onChange={(e) => setOutputLanguage(e.target.value)}
-                className={languageSelectClass}
-              >
-                {outputLanguages.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                className="pointer-events-none absolute end-2.5 top-1/2 size-4 -translate-y-1/2 text-muted"
-                aria-hidden="true"
-              />
-            </div>
-
-            <ToolbarDivider />
-
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-ink">
-              <input
-                type="checkbox"
-                checked={allowOperatorQuestions}
-                onChange={(e) => setAllowOperatorQuestions(e.target.checked)}
-                className="size-4 rounded border-line bg-fog/40 text-moss focus:ring-moss"
-              />
-              <span className="whitespace-nowrap">{t("analysis.allowQuestions")}</span>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <AnalysisSection title={t("analysis.prompt")}>
+            <label htmlFor="prompt" className="sr-only">
+              {t("analysis.prompt")}
             </label>
-
-            <div className="ms-auto w-full sm:w-auto">
-              <IconButton
-                type="submit"
-                icon={Play}
-                disabled={running}
-                className="w-full shrink-0 rounded-full bg-moss px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-moss-deep disabled:opacity-60 sm:w-auto"
-              >
-                {t("analysis.run")}
-              </IconButton>
-            </div>
-          </div>
-
-          {showChart ? (
-            <div>
-              <p className="sr-only">{t("analysis.chartMultiHint")}</p>
+            <textarea
+              id="prompt"
+              value={prompt}
+              dir={promptDir}
+              lang={textLang(prompt)}
+              onChange={(e) => setPrompt(e.target.value)}
+              className={`${textareaClass} min-h-[8.5rem]`}
+              placeholder={t("analysis.promptPlaceholder")}
+            />
+            <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-3">
               <div
-                className="flex flex-wrap gap-2"
+                className={segmentShellClass()}
                 role="group"
-                aria-label={t("analysis.chart")}
+                aria-label={t("analysis.speed")}
               >
-                {chartTypes.map((item) => {
-                  const pressed = chartTypesSelected.includes(item.value);
-                  const atCap = !pressed && chartTypesSelected.length >= 4;
-                  const Icon = item.icon;
+                {speedLevels.map((item) => {
+                  const pressed = reportType === item.value;
+                  const SpeedIcon = item.icon;
                   return (
                     <button
                       key={item.value}
                       type="button"
-                      title={item.label}
-                      aria-label={item.label}
                       aria-pressed={pressed}
-                      disabled={atCap}
-                      onClick={() => toggleChartType(item.value)}
-                      className={chartIconBtnClass(pressed, atCap)}
+                      onClick={() => setReportType(item.value)}
+                      className={segmentBtnClass(pressed)}
                     >
-                      <Icon className="size-8" aria-hidden="true" />
+                      {SpeedIcon ? (
+                        <SpeedIcon className="size-4 shrink-0" aria-hidden="true" />
+                      ) : null}
+                      {item.label}
                     </button>
                   );
                 })}
               </div>
+              <div className="relative shrink-0">
+                <label htmlFor="output_language" className="sr-only">
+                  {t("analysis.outputLanguage")}
+                </label>
+                <Globe
+                  className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+                  aria-hidden="true"
+                />
+                <select
+                  id="output_language"
+                  value={outputLanguage}
+                  onChange={(e) => setOutputLanguage(e.target.value)}
+                  className={languageSelectClass}
+                >
+                  {outputLanguages.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  className="pointer-events-none absolute end-2.5 top-1/2 size-4 -translate-y-1/2 text-muted"
+                  aria-hidden="true"
+                />
+              </div>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={allowOperatorQuestions}
+                  onChange={(e) => setAllowOperatorQuestions(e.target.checked)}
+                  className="size-4 rounded border-line bg-fog/40 text-moss focus:ring-moss"
+                />
+                <span className="whitespace-nowrap">{t("analysis.allowQuestions")}</span>
+              </label>
             </div>
-          ) : null}
+          </AnalysisSection>
 
-          {showGrid ? (
-            <GridColumnInput columns={gridColumns} onChange={setGridColumns} />
-          ) : null}
+          <AnalysisSection
+            title={t("analysis.modeResearch")}
+            enableable
+            enabled={researchEnabled}
+            onEnabledChange={(next) => setOutputEnabled("research", next)}
+          >
+            <label htmlFor="research_prompt" className="text-xs font-medium text-muted">
+              {t("analysis.additionalPrompt")}
+            </label>
+            <textarea
+              id="research_prompt"
+              value={researchPrompt}
+              onChange={(e) => setResearchPrompt(e.target.value)}
+              className={`${extraPromptClass} mt-1`}
+              placeholder={t("analysis.additionalPromptPlaceholder")}
+              disabled={!researchEnabled}
+            />
+          </AnalysisSection>
+
+          <AnalysisSection
+            title={t("analysis.modeGrid")}
+            enableable
+            enabled={gridEnabled}
+            onEnabledChange={(next) => setOutputEnabled("grid", next)}
+          >
+            <GridColumnInput
+              columns={gridColumns}
+              onChange={setGridColumns}
+              disabled={!gridEnabled}
+            />
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <label className="block text-sm">
+                <span className="font-medium text-ink">{t("analysis.gridSort")}</span>
+                <select
+                  className={`${sortSelectClass} mt-1 min-w-[8rem]`}
+                  value={gridSortColumn}
+                  onChange={(e) => setGridSortColumn(e.target.value)}
+                  disabled={!gridEnabled}
+                >
+                  <option value="">{t("common.noneDash")}</option>
+                  {gridColumns.map((col) => (
+                    <option key={col} value={col}>
+                      {col}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm">
+                <span className="font-medium text-ink">{t("analysis.gridSortDir")}</span>
+                <select
+                  className={`${sortSelectClass} mt-1`}
+                  value={gridSortDir}
+                  onChange={(e) => setGridSortDir(e.target.value)}
+                  disabled={!gridEnabled || !gridSortColumn}
+                >
+                  <option value="ASC">{t("analysis.gridSortAsc")}</option>
+                  <option value="DESC">{t("analysis.gridSortDesc")}</option>
+                </select>
+              </label>
+            </div>
+            <label htmlFor="grid_prompt" className="mt-3 block text-xs font-medium text-muted">
+              {t("analysis.additionalPrompt")}
+            </label>
+            <textarea
+              id="grid_prompt"
+              value={gridPrompt}
+              onChange={(e) => setGridPrompt(e.target.value)}
+              className={`${extraPromptClass} mt-1`}
+              placeholder={t("analysis.additionalPromptPlaceholder")}
+              disabled={!gridEnabled}
+            />
+          </AnalysisSection>
+
+          <AnalysisSection
+            title={t("analysis.modeChart")}
+            enableable
+            enabled={chartEnabled}
+            onEnabledChange={(next) => setOutputEnabled("chart", next)}
+          >
+            <p className="sr-only">{t("analysis.chartMultiHint")}</p>
+            <div
+              className="flex flex-wrap gap-2"
+              role="group"
+              aria-label={t("analysis.chart")}
+            >
+              {chartTypes.map((item) => {
+                const pressed = chartTypesSelected.includes(item.value);
+                const atCap = !pressed && chartTypesSelected.length >= 4;
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    title={item.label}
+                    aria-label={item.label}
+                    aria-pressed={pressed}
+                    disabled={!chartEnabled || atCap}
+                    onClick={() => toggleChartType(item.value)}
+                    className={chartIconBtnClass(pressed, atCap)}
+                  >
+                    <Icon className="size-8" aria-hidden="true" />
+                  </button>
+                );
+              })}
+            </div>
+            <label htmlFor="chart_prompt" className="mt-3 block text-xs font-medium text-muted">
+              {t("analysis.additionalPrompt")}
+            </label>
+            <textarea
+              id="chart_prompt"
+              value={chartPrompt}
+              onChange={(e) => setChartPrompt(e.target.value)}
+              className={`${extraPromptClass} mt-1`}
+              placeholder={t("analysis.additionalPromptPlaceholder")}
+              disabled={!chartEnabled}
+            />
+          </AnalysisSection>
+        </div>
+
+        <div className="flex justify-end border-t border-line/50 pt-3">
+          <IconButton
+            type="submit"
+            icon={Play}
+            disabled={running}
+            className="w-full shrink-0 rounded-full bg-moss px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-moss-deep disabled:opacity-60 sm:w-auto"
+          >
+            {t("analysis.run")}
+          </IconButton>
         </div>
       </form>
 
