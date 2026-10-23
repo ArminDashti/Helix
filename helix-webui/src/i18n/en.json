@@ -793,8 +793,29 @@
     "description": "description"
   },
   "rag": {
-    "subtitle": "Retrieval-augmented generation",
-    "placeholder": "This section is reserved for now — RAG knowledge bases will be configured here."
+    "subtitle": "Markdown notes the researcher can retrieve during research runs.",
+    "loading": "Loading knowledge documents…",
+    "loadFailed": "Failed to load RAG documents",
+    "upload": "Upload .md",
+    "uploading": "Uploading…",
+    "uploadFailed": "Upload failed",
+    "uploadedOne": "Imported {{id}}",
+    "uploadedMany": "Imported {{count}} documents",
+    "invalidExtension": "Only .md files are supported ({{name}}).",
+    "invalidId": "File name must be a safe document id (letters, numbers, . _ -) — got {{name}}.",
+    "overwriteConfirm": "Replace existing document “{{id}}” with {{filename}}?",
+    "empty": "No documents yet — upload a .md file.",
+    "noMatching": "No documents match your filter.",
+    "filterSr": "Filter documents",
+    "filterPlaceholder": "Filter by title or id…",
+    "selectDoc": "Select a document or upload a .md file.",
+    "totals": "{{docs}} documents · {{tokens}} tokens in corpus (budget {{budget}} per run)",
+    "tokensShort": "tokens",
+    "unsaved": "Unsaved changes",
+    "saved": "Saved {{id}}",
+    "saveFailed": "Failed to save document",
+    "deleteConfirm": "Delete document “{{id}}”?",
+    "deleted": "Deleted {{id}}"
   },
   "mcp": {
     "title": "MCP",
@@ -968,5 +989,6 @@
     "delete": "Delete"
   }
 }
+
 
 

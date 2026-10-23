@@ -290,6 +290,40 @@ export async function deleteReference(name) {
   try { notifyMutation(path, "DELETE"); } catch {}
 }
 
+export async function fetchRagDocs() {
+  return requestJson("/api/rag/");
+}
+
+export async function createRagDoc({ id, content = "", title }) {
+  const body = { id, content };
+  if (title) body.title = title;
+  return requestJson("/api/rag/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateRagDoc(id, { content, title }) {
+  const body = {};
+  if (content !== undefined) body.content = content;
+  if (title !== undefined) body.title = title;
+  return requestJson(`/api/rag/${encodeURIComponent(id)}/`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteRagDoc(id) {
+  const path = `/api/rag/${encodeURIComponent(id)}/`;
+  const res = await apiFetch(path, { method: "DELETE" });
+  if (!res.ok && res.status !== 204) {
+    await parseJson(res, path);
+  }
+  try { notifyMutation(path, "DELETE"); } catch {}
+}
+
 export async function fetchSkills(scope) {
   const qs = scope ? `?scope=${encodeURIComponent(scope)}` : "";
   const data = await requestJson(`/api/skills/${qs}`);
