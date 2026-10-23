@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ClipboardCopy, FileDown, LayoutTemplate, Upload } from "lucide-react";
-import PageHeader from "../components/PageHeader.jsx";
+import { ClipboardCopy, FileDown, Upload } from "lucide-react";
 import IconButton from "../components/IconButton.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
 import { fetchBranding } from "../api/client.js";
@@ -308,16 +307,61 @@ export default function CanvasPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
-      <PageHeader icon={LayoutTemplate} title={t("canvas.title")}>
-        <p className="mt-1 text-sm text-muted">{t("canvas.subtitle")}</p>
-      </PageHeader>
-
-      <div className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[minmax(16rem,22rem)_1fr]">
+      <header className="flex shrink-0 flex-wrap items-end justify-between gap-2">
         <aside
-          className="h-full min-h-0 space-y-3 overflow-y-auto overscroll-contain rounded-2xl border border-line/80 bg-paper/80 p-4"
+          aria-label={t("canvas.options")}
+          className="flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-x-auto rounded-2xl border border-line/80 bg-paper/80 p-2 sm:p-3"
+        >
+          <IconButton
+            type="button"
+            icon={FileDown}
+            disabled={saving}
+            onClick={handleExportSample}
+            className="shrink-0 rounded-xl bg-moss px-4 py-2 text-sm font-semibold text-white hover:bg-moss-deep disabled:opacity-60"
+          >
+            {t("canvas.exportSample")}
+          </IconButton>
+          <IconButton
+            type="button"
+            icon={ClipboardCopy}
+            onClick={handleCopyDesign}
+            className="shrink-0 rounded-xl border border-line bg-fog px-4 py-2 text-sm font-medium text-ink hover:bg-fog/80"
+          >
+            {t("canvas.copyDesign")}
+          </IconButton>
+          <label
+            className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-line bg-fog px-4 py-2 text-sm font-medium text-ink hover:bg-fog/80"
+          >
+            <Upload className="size-4 shrink-0" aria-hidden="true" />
+            {t("canvas.importDesign")}
+            <input
+              type="file"
+              accept="application/json,.json"
+              className="sr-only"
+              onChange={handleImportDesignFile}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={handleReset}
+            className="shrink-0 rounded-xl border border-line bg-fog px-4 py-2 text-sm font-medium text-ink hover:bg-fog/80"
+          >
+            {t("canvas.reset")}
+          </button>
+          {designNotice ? (
+            <p className="shrink-0 text-xs text-moss" role="status">
+              {designNotice}
+            </p>
+          ) : null}
+        </aside>
+      </header>
+
+      <div className="grid min-h-0 flex-1 gap-3 overflow-hidden xl:grid-cols-[minmax(9rem,12rem)_minmax(14rem,18rem)_1fr]">
+        <aside
+          aria-label={t("canvas.items")}
+          className="h-full min-h-0 space-y-3 overflow-y-auto overscroll-contain rounded-2xl border border-line/80 bg-paper/80 p-3"
           onWheel={(e) => e.stopPropagation()}
         >
-          <h2 className="text-sm font-semibold text-ink">{t("canvas.items")}</h2>
           <nav className="flex flex-col gap-1" aria-label={t("canvas.items")}>
             {CANVAS_ITEM_IDS.map((id) => (
               <button
@@ -334,10 +378,106 @@ export default function CanvasPage() {
               </button>
             ))}
           </nav>
-          <p className="border-t border-line/60 pt-2 text-sm font-medium text-ink">
-            {t("canvas.itemValues")}
-          </p>
+        </aside>
 
+        <aside
+          aria-label={t("canvas.itemValues")}
+          className="h-full min-h-0 space-y-3 overflow-y-auto overscroll-contain rounded-2xl border border-line/80 bg-paper/80 p-3"
+          onWheel={(e) => e.stopPropagation()}
+        >
+          {selectedElement === CANVAS_LAYOUT_ID ? (
+            <>
+              <div>
+                <label
+                  htmlFor="pdf_orientation"
+                  className="block text-sm font-medium text-ink"
+                >
+                  {t("canvas.orientation")}
+                </label>
+                <select
+                  id="pdf_orientation"
+                  value={design.orientation || "landscape"}
+                  onChange={(e) => updateTopLevel("orientation", e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="landscape">{t("canvas.landscape")}</option>
+                  <option value="portrait">{t("canvas.portrait")}</option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="pdf_page_bg"
+                  className="block text-sm font-medium text-ink"
+                >
+                  {t("canvas.pageBackground")}
+                </label>
+                <input
+                  id="pdf_page_bg"
+                  type="color"
+                  value={
+                    /^#[0-9a-fA-F]{6}$/.test(design.pageBackgroundColor || "")
+                      ? design.pageBackgroundColor
+                      : "#ffffff"
+                  }
+                  onChange={(e) =>
+                    updateTopLevel("pageBackgroundColor", e.target.value)
+                  }
+                  className="mt-1 h-10 w-full cursor-pointer rounded-xl border border-line bg-fog/40"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="pdf_margin"
+                  className="block text-sm font-medium text-ink"
+                >
+                  {t("canvas.pageMarginMm")}
+                </label>
+                <input
+                  id="pdf_margin"
+                  type="number"
+                  min={8}
+                  max={24}
+                  value={design.pageMarginMm ?? 12}
+                  onChange={(e) =>
+                    updateTopLevel("pageMarginMm", Number(e.target.value))
+                  }
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="pdf_company_logo"
+                  className="block text-sm font-medium text-ink"
+                >
+                  {t("canvas.changeLogo")}
+                </label>
+                <input
+                  id="pdf_company_logo"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoFile}
+                  className="mt-1 block w-full text-sm text-ink file:me-2 file:rounded-lg file:border-0 file:bg-moss file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white"
+                />
+                {design.companyLogoDataUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => updateTopLevel("companyLogoDataUrl", "")}
+                    className="mt-2 text-xs font-medium text-moss hover:underline"
+                  >
+                    {t("canvas.clearLogo")}
+                  </button>
+                ) : null}
+                {logoError ? (
+                  <p className="mt-1 text-xs text-warn">{logoError}</p>
+                ) : null}
+              </div>
+            </>
+          ) : null}
+
+          {selectedElement !== CANVAS_LAYOUT_ID ? (
           <div>
             <label
               htmlFor="canvas_visibility"
@@ -357,6 +497,7 @@ export default function CanvasPage() {
               <option value="hide">{t("canvas.hidden")}</option>
             </select>
           </div>
+          ) : null}
 
           {selectedElement === "title" ? (
             <div>
@@ -381,24 +522,53 @@ export default function CanvasPage() {
           ) : null}
 
           {selectedElement === "footer" ? (
-            <div>
-              <label
-                htmlFor="canvas_footer_text"
-                className="block text-sm font-medium text-ink"
-              >
-                {t("canvas.footerText")}
-              </label>
-              <textarea
-                id="canvas_footer_text"
-                rows={3}
-                value={design.footerText ?? ""}
-                placeholder={footerFallback}
-                onChange={(e) => updateTopLevel("footerText", e.target.value)}
-                className={inputClass}
-              />
-            </div>
+            <>
+              <div>
+                <label
+                  htmlFor="canvas_footer_text"
+                  className="block text-sm font-medium text-ink"
+                >
+                  {t("canvas.footerText")}
+                </label>
+                <textarea
+                  id="canvas_footer_text"
+                  rows={3}
+                  value={design.footerText ?? ""}
+                  placeholder={footerFallback}
+                  onChange={(e) => updateTopLevel("footerText", e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+              <div className="space-y-2">
+                <span className="sr-only">{t("canvas.pdfFooterExtras")}</span>
+                <label className="flex items-center gap-2 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    checked={design.footerShowDate !== false}
+                    onChange={(e) =>
+                      updateTopLevel("footerShowDate", e.target.checked)
+                    }
+                    className="size-4 rounded border-line text-moss focus:ring-moss"
+                  />
+                  {t("canvas.footerShowDate")}
+                </label>
+                <label className="flex items-center gap-2 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    checked={design.footerShowPageNumbers !== false}
+                    onChange={(e) =>
+                      updateTopLevel("footerShowPageNumbers", e.target.checked)
+                    }
+                    className="size-4 rounded border-line text-moss focus:ring-moss"
+                  />
+                  {t("canvas.footerShowPageNumbers")}
+                </label>
+              </div>
+            </>
           ) : null}
 
+          {selectedElement !== CANVAS_LAYOUT_ID ? (
+          <>
           <div>
             <label
               htmlFor="el_font"
@@ -579,168 +749,12 @@ export default function CanvasPage() {
               className={inputClass}
             />
           </div>
-
-          <div className="border-t border-line/60 pt-3">
-            <label
-              htmlFor="pdf_orientation"
-              className="block text-sm font-medium text-ink"
-            >
-              {t("canvas.orientation")}
-            </label>
-            <select
-              id="pdf_orientation"
-              value={design.orientation || "landscape"}
-              onChange={(e) => updateTopLevel("orientation", e.target.value)}
-              className={inputClass}
-            >
-              <option value="landscape">{t("canvas.landscape")}</option>
-              <option value="portrait">{t("canvas.portrait")}</option>
-            </select>
-          </div>
-
-          <div>
-            <label
-              htmlFor="pdf_page_bg"
-              className="block text-sm font-medium text-ink"
-            >
-              {t("canvas.pageBackground")}
-            </label>
-            <input
-              id="pdf_page_bg"
-              type="color"
-              value={
-                /^#[0-9a-fA-F]{6}$/.test(design.pageBackgroundColor || "")
-                  ? design.pageBackgroundColor
-                  : "#ffffff"
-              }
-              onChange={(e) =>
-                updateTopLevel("pageBackgroundColor", e.target.value)
-              }
-              className="mt-1 h-10 w-full cursor-pointer rounded-xl border border-line bg-fog/40"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="pdf_margin" className="block text-sm font-medium text-ink">
-              {t("canvas.pageMarginMm")}
-            </label>
-            <input
-              id="pdf_margin"
-              type="number"
-              min={8}
-              max={24}
-              value={design.pageMarginMm ?? 12}
-              onChange={(e) =>
-                updateTopLevel("pageMarginMm", Number(e.target.value))
-              }
-              className={inputClass}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-ink">{t("canvas.pdfFooterExtras")}</p>
-            <label className="flex items-center gap-2 text-sm text-ink">
-              <input
-                type="checkbox"
-                checked={design.footerShowDate !== false}
-                onChange={(e) =>
-                  updateTopLevel("footerShowDate", e.target.checked)
-                }
-                className="size-4 rounded border-line text-moss focus:ring-moss"
-              />
-              {t("canvas.footerShowDate")}
-            </label>
-            <label className="flex items-center gap-2 text-sm text-ink">
-              <input
-                type="checkbox"
-                checked={design.footerShowPageNumbers !== false}
-                onChange={(e) =>
-                  updateTopLevel("footerShowPageNumbers", e.target.checked)
-                }
-                className="size-4 rounded border-line text-moss focus:ring-moss"
-              />
-              {t("canvas.footerShowPageNumbers")}
-            </label>
-          </div>
-
-          <div>
-            <label
-              htmlFor="pdf_company_logo"
-              className="block text-sm font-medium text-ink"
-            >
-              {t("canvas.changeLogo")}
-            </label>
-            <input
-              id="pdf_company_logo"
-              type="file"
-              accept="image/*"
-              onChange={handleLogoFile}
-              className="mt-1 block w-full text-sm text-ink file:me-2 file:rounded-lg file:border-0 file:bg-moss file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white"
-            />
-            {design.companyLogoDataUrl ? (
-              <button
-                type="button"
-                onClick={() => updateTopLevel("companyLogoDataUrl", "")}
-                className="mt-2 text-xs font-medium text-moss hover:underline"
-              >
-                {t("canvas.clearLogo")}
-              </button>
-            ) : null}
-            {logoError ? (
-              <p className="mt-1 text-xs text-warn">{logoError}</p>
-            ) : null}
-          </div>
-
-          <div className="flex flex-wrap gap-2 pt-1">
-            <IconButton
-              type="button"
-              icon={FileDown}
-              disabled={saving}
-              onClick={handleExportSample}
-              className="rounded-xl bg-moss px-4 py-2 text-sm font-semibold text-white hover:bg-moss-deep disabled:opacity-60"
-            >
-              {t("canvas.exportSample")}
-            </IconButton>
-            <IconButton
-              type="button"
-              icon={ClipboardCopy}
-              onClick={handleCopyDesign}
-              className="rounded-xl border border-line bg-fog px-4 py-2 text-sm font-medium text-ink hover:bg-fog/80"
-            >
-              {t("canvas.copyDesign")}
-            </IconButton>
-            <label
-              className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-line bg-fog px-4 py-2 text-sm font-medium text-ink hover:bg-fog/80"
-            >
-              <Upload className="size-4 shrink-0" aria-hidden="true" />
-              {t("canvas.importDesign")}
-              <input
-                type="file"
-                accept="application/json,.json"
-                className="sr-only"
-                onChange={handleImportDesignFile}
-              />
-            </label>
-            <button
-              type="button"
-              onClick={handleReset}
-              className="rounded-xl border border-line bg-fog px-4 py-2 text-sm font-medium text-ink hover:bg-fog/80"
-            >
-              {t("canvas.reset")}
-            </button>
-          </div>
-          {designNotice ? (
-            <p className="text-xs text-moss" role="status">{designNotice}</p>
+          </>
           ) : null}
+
         </aside>
 
         <div className="min-h-0 overflow-auto rounded-2xl border border-line/80 bg-fog/30 p-3">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-ink">
-              {t("canvas.preview")}
-            </h2>
-            <span className="text-xs text-muted">{t("canvas.a4PreviewHint")}</span>
-          </div>
           <div className="flex justify-center overflow-auto pb-2">
             <div
               className="shrink-0 overflow-hidden rounded-xl border border-line shadow-sm"

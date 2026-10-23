@@ -301,7 +301,6 @@ function ResultsList() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <PageHeader icon={Play} title={t("results.title")} />
       {error ? (
         <p className="rounded-xl border border-warn-border bg-warn-bg px-4 py-2 text-sm text-warn">
           {error}
@@ -419,88 +418,84 @@ function ResultDetail({ resultId }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
-      <PageHeader
-        icon={Play}
-        title={t("results.title")}
-        backTo="/results"
-        actions={
-          <>
-            {showText ? (
-              <IconButton
-                type="button"
-                icon={Pencil}
-                onClick={() => setEditing((v) => !v)}
-                className="rounded-xl border border-line bg-paper px-4 py-2 text-sm font-medium text-ink hover:bg-fog"
-              >
-                {editing ? t("results.done") : t("results.edit")}
-              </IconButton>
-            ) : null}
-            {showChart || showText || showGrid ? (
-              <IconButton
-                type="button"
-                icon={FileDown}
-                onClick={async () => {
-                  const instances = (chartRefs.current || [])
-                    .map((ref) => ref?.getEchartsInstance?.())
-                    .filter(Boolean);
-                  await exportResultPdf({
-                    prompt: editedPrompt,
-                    chartInstances: instances,
-                    textReport: editedReport,
-                    grid: result.grid,
-                    showChart,
-                    showText,
-                    showGrid,
-                    language,
-                    labels: pdfLabels,
-                    logoUrl: assetUrl("helix-logo.png"),
-                    companyLogoUrl: assetUrl("company-logo.png"),
-                    locale,
-                    design: loadPdfDesign(),
-                  });
-                }}
-                className="rounded-xl border border-line bg-paper px-4 py-2 text-sm font-medium text-ink hover:bg-fog"
-              >
-                {t("results.exportPdf")}
-              </IconButton>
-            ) : null}
-            <ResultShareMenu
-              resultId={resultId}
-              prompt={editedPrompt}
-              textReport={editedReport}
-            />
-            <Link
-              to="/results"
-              className="inline-flex items-center gap-2 rounded-xl border border-line bg-paper px-4 py-2 text-sm font-medium text-ink hover:bg-fog"
+      <header className="flex shrink-0 flex-wrap items-end justify-between gap-2">
+        <PageBackButton to="/results" className="mt-0.5 sm:mt-1" />
+        <aside
+          aria-label={t("results.title")}
+          className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2"
+        >
+          {showText ? (
+            <IconButton
+              type="button"
+              icon={Pencil}
+              onClick={() => setEditing((v) => !v)}
+              className="rounded-xl border border-line bg-paper px-4 py-2 text-sm font-medium text-ink hover:bg-fog"
             >
-              <History className="size-4 shrink-0" aria-hidden="true" />
-              {t("results.history")}
-            </Link>
-            <Link
-              to="/"
-              className="inline-flex items-center gap-2 rounded-xl border border-line bg-paper px-4 py-2 text-sm font-medium text-ink hover:bg-fog"
+              {editing ? t("results.done") : t("results.edit")}
+            </IconButton>
+          ) : null}
+          {showChart || showText || showGrid ? (
+            <IconButton
+              type="button"
+              icon={FileDown}
+              onClick={async () => {
+                const instances = (chartRefs.current || [])
+                  .map((ref) => ref?.getEchartsInstance?.())
+                  .filter(Boolean);
+                await exportResultPdf({
+                  prompt: editedPrompt,
+                  chartInstances: instances,
+                  textReport: editedReport,
+                  grid: result.grid,
+                  showChart,
+                  showText,
+                  showGrid,
+                  language,
+                  labels: pdfLabels,
+                  logoUrl: assetUrl("helix-logo.png"),
+                  companyLogoUrl: assetUrl("company-logo.png"),
+                  locale,
+                  design: loadPdfDesign(),
+                });
+              }}
+              className="rounded-xl border border-line bg-paper px-4 py-2 text-sm font-medium text-ink hover:bg-fog"
             >
-              <Plus className="size-4 shrink-0" aria-hidden="true" />
-              {t("results.newPrompt")}
-            </Link>
-          </>
-        }
-      >
+              {t("results.exportPdf")}
+            </IconButton>
+          ) : null}
+          <ResultShareMenu
+            resultId={resultId}
+            prompt={editedPrompt}
+            textReport={editedReport}
+          />
+          <Link
+            to="/results"
+            className="inline-flex items-center gap-2 rounded-xl border border-line bg-paper px-4 py-2 text-sm font-medium text-ink hover:bg-fog"
+          >
+            <History className="size-4 shrink-0" aria-hidden="true" />
+            {t("results.history")}
+          </Link>
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 rounded-xl border border-line bg-paper px-4 py-2 text-sm font-medium text-ink hover:bg-fog"
+          >
+            <Plus className="size-4 shrink-0" aria-hidden="true" />
+            {t("results.newPrompt")}
+          </Link>
+        </aside>
+      </header>
+
+      <section className="space-y-3" aria-live="polite">
         {editing ? (
           <textarea
             value={editedPrompt}
             onChange={(e) => setEditedPrompt(e.target.value)}
             rows={2}
-            className="mt-1 w-full max-w-2xl resize-y rounded-xl border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-moss focus:ring-2 focus:ring-moss/30"
+            className="w-full resize-y rounded-xl border border-line bg-paper/80 px-3 py-2 text-sm text-ink outline-none focus:border-moss focus:ring-2 focus:ring-moss/30"
           />
         ) : (
-          <p className="mt-0.5 max-w-2xl text-sm text-muted line-clamp-2">
-            {editedPrompt}
-          </p>
+          <p className="max-w-3xl text-sm text-muted">{editedPrompt}</p>
         )}
-      </PageHeader>
-
-      <section className="space-y-3" aria-live="polite">
         {tokenUsage ? (
           <div
             dir="ltr"
