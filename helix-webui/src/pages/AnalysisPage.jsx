@@ -438,213 +438,250 @@ export default function AnalysisPage() {
   const gridEnabled = wantsGrid(outputs);
   const researchEnabled = Boolean(outputs.research);
 
+  const runSummary = useMemo(() => {
+    const parts = [];
+    if (chartEnabled) parts.push(t("analysis.modeChart"));
+    if (gridEnabled) parts.push(t("analysis.modeGrid"));
+    if (researchEnabled) parts.push(t("analysis.modeResearch"));
+    if (parts.length === 0) return t("analysis.runSummaryNone");
+    return t("analysis.runSummary", {
+      items: parts.join(t("analysis.runSummaryJoin")),
+    });
+  }, [chartEnabled, gridEnabled, researchEnabled, t]);
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <h1
-        className="border-s-[3px] border-moss ps-3 font-display text-xl text-ink sm:text-2xl"
-      >
-        {t("analysis.title")}
-      </h1>
+      <header className="max-w-3xl">
+        <h1 className="font-display text-xl font-semibold text-ink sm:text-2xl">
+          {t("analysis.title")}
+        </h1>
+        <p className="mt-1.5 text-sm leading-relaxed text-muted">
+          {t("analysis.subtitle")}
+        </p>
+      </header>
       <form
         onSubmit={handleRun}
         className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-line/70 bg-paper/50 p-4 shadow-[0_24px_60px_-32px_rgba(0,0,0,0.55)] backdrop-blur-sm sm:p-5"
       >
-        <div className="grid gap-4 lg:grid-cols-2">
-          <AnalysisSection title={t("analysis.prompt")}>
-            <label htmlFor="prompt" className="sr-only">
-              {t("analysis.prompt")}
-            </label>
-            <textarea
-              id="prompt"
-              value={prompt}
-              dir={promptDir}
-              lang={textLang(prompt)}
-              onChange={(e) => setPrompt(e.target.value)}
-              className={`${textareaClass} min-h-[8.5rem]`}
-              placeholder={t("analysis.promptPlaceholder")}
-            />
-            <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:items-start">
+          <div className="flex flex-col gap-5">
+            <AnalysisSection title={t("analysis.prompt")}>
+              <label htmlFor="prompt" className="sr-only">
+                {t("analysis.prompt")}
+              </label>
+              <textarea
+                id="prompt"
+                value={prompt}
+                dir={promptDir}
+                lang={textLang(prompt)}
+                onChange={(e) => setPrompt(e.target.value)}
+                className={`${textareaClass} min-h-[9rem] sm:min-h-[7.5rem]`}
+                placeholder={t("analysis.promptPlaceholder")}
+              />
+            </AnalysisSection>
+
+            <AnalysisSection title={t("analysis.runOptions")}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="min-w-0 sm:col-span-2">
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                    {t("analysis.speed")}
+                  </span>
+                  <div
+                    className={`${segmentShellClass()} mt-2 w-full`}
+                    role="group"
+                    aria-label={t("analysis.speed")}
+                  >
+                    {speedLevels.map((item) => {
+                      const pressed = reportType === item.value;
+                      const SpeedIcon = item.icon;
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          aria-pressed={pressed}
+                          onClick={() => setReportType(item.value)}
+                          className={`${segmentBtnClass(pressed)} flex-1 justify-center`}
+                        >
+                          {SpeedIcon ? (
+                            <SpeedIcon className="size-4 shrink-0" aria-hidden="true" />
+                          ) : null}
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="min-w-0">
+                  <label
+                    htmlFor="output_language"
+                    className="text-xs font-medium uppercase tracking-wide text-muted"
+                  >
+                    {t("analysis.outputLanguage")}
+                  </label>
+                  <div className="relative mt-2">
+                    <Globe
+                      className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+                      aria-hidden="true"
+                    />
+                    <select
+                      id="output_language"
+                      value={outputLanguage}
+                      onChange={(e) => setOutputLanguage(e.target.value)}
+                      className={`${languageSelectClass} w-full min-w-0`}
+                    >
+                      {outputLanguages.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute end-2.5 top-1/2 size-4 -translate-y-1/2 text-muted"
+                      aria-hidden="true"
+                    />
+                  </div>
+                </div>
+                <label
+                  className="flex min-h-[2.75rem] cursor-pointer items-center gap-2 rounded-xl border border-line/70 bg-fog/20 px-3 py-2.5 text-sm text-ink"
+                >
+                  <input
+                    type="checkbox"
+                    checked={allowOperatorQuestions}
+                    onChange={(e) => setAllowOperatorQuestions(e.target.checked)}
+                    className="size-4 rounded border-line bg-fog/40 text-moss focus:ring-moss"
+                  />
+                  <span>{t("analysis.allowQuestions")}</span>
+                </label>
+              </div>
+            </AnalysisSection>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <div>
+              <h2 className="text-base font-semibold text-ink">
+                {t("analysis.outputs")}
+              </h2>
+              <p className="mt-1 text-sm leading-relaxed text-muted">
+                {t("analysis.outputsHint")}
+              </p>
+            </div>
+
+            <AnalysisSection
+              title={t("analysis.modeChart")}
+              description={t("analysis.modeChartHint")}
+              icon={<BarChart3 className="size-5" aria-hidden="true" />}
+              sectionKey="chart"
+              enableable
+              enabled={chartEnabled}
+              onEnabledChange={(next) => setOutputEnabled("chart", next)}
+            >
+              <p className="mb-3 text-xs text-muted">{t("analysis.chartMultiHint")}</p>
               <div
-                className={segmentShellClass()}
+                className="flex flex-wrap gap-2"
                 role="group"
-                aria-label={t("analysis.speed")}
+                aria-label={t("analysis.chart")}
               >
-                {speedLevels.map((item) => {
-                  const pressed = reportType === item.value;
-                  const SpeedIcon = item.icon;
+                {chartTypes.map((item) => {
+                  const pressed = chartTypesSelected.includes(item.value);
+                  const atCap = !pressed && chartTypesSelected.length >= 4;
+                  const Icon = item.icon;
                   return (
                     <button
                       key={item.value}
                       type="button"
+                      title={item.label}
+                      aria-label={item.label}
                       aria-pressed={pressed}
-                      onClick={() => setReportType(item.value)}
-                      className={segmentBtnClass(pressed)}
+                      disabled={atCap}
+                      onClick={() => toggleChartType(item.value)}
+                      className={chartIconBtnClass(pressed, atCap)}
                     >
-                      {SpeedIcon ? (
-                        <SpeedIcon className="size-4 shrink-0" aria-hidden="true" />
-                      ) : null}
-                      {item.label}
+                      <Icon className="size-8" aria-hidden="true" />
                     </button>
                   );
                 })}
               </div>
-              <div className="relative shrink-0">
-                <label htmlFor="output_language" className="sr-only">
-                  {t("analysis.outputLanguage")}
-                </label>
-                <Globe
-                  className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted"
-                  aria-hidden="true"
-                />
-                <select
-                  id="output_language"
-                  value={outputLanguage}
-                  onChange={(e) => setOutputLanguage(e.target.value)}
-                  className={languageSelectClass}
-                >
-                  {outputLanguages.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  className="pointer-events-none absolute end-2.5 top-1/2 size-4 -translate-y-1/2 text-muted"
-                  aria-hidden="true"
-                />
-              </div>
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-ink">
-                <input
-                  type="checkbox"
-                  checked={allowOperatorQuestions}
-                  onChange={(e) => setAllowOperatorQuestions(e.target.checked)}
-                  className="size-4 rounded border-line bg-fog/40 text-moss focus:ring-moss"
-                />
-                <span className="whitespace-nowrap">{t("analysis.allowQuestions")}</span>
-              </label>
-            </div>
-          </AnalysisSection>
+              <OptionalPromptField
+                id="chart_prompt"
+                value={chartPrompt}
+                onChange={(e) => setChartPrompt(e.target.value)}
+                placeholder={t("analysis.additionalPromptPlaceholder")}
+                t={t}
+              />
+            </AnalysisSection>
 
-          <AnalysisSection
-            title={t("analysis.modeResearch")}
-            enableable
-            enabled={researchEnabled}
-            onEnabledChange={(next) => setOutputEnabled("research", next)}
-          >
-            <label htmlFor="research_prompt" className="text-xs font-medium text-muted">
-              {t("analysis.additionalPrompt")}
-            </label>
-            <textarea
-              id="research_prompt"
-              value={researchPrompt}
-              onChange={(e) => setResearchPrompt(e.target.value)}
-              className={`${extraPromptClass} mt-1`}
-              placeholder={t("analysis.additionalPromptPlaceholder")}
-              disabled={!researchEnabled}
-            />
-          </AnalysisSection>
-
-          <AnalysisSection
-            title={t("analysis.modeGrid")}
-            enableable
-            enabled={gridEnabled}
-            onEnabledChange={(next) => setOutputEnabled("grid", next)}
-          >
-            <GridColumnInput
-              columns={gridColumns}
-              onChange={setGridColumns}
-              disabled={!gridEnabled}
-            />
-            <div className="mt-3 flex flex-wrap items-end gap-3">
-              <label className="block text-sm">
-                <span className="font-medium text-ink">{t("analysis.gridSort")}</span>
-                <select
-                  className={`${sortSelectClass} mt-1 min-w-[8rem]`}
-                  value={gridSortColumn}
-                  onChange={(e) => setGridSortColumn(e.target.value)}
-                  disabled={!gridEnabled}
-                >
-                  <option value="">{t("common.noneDash")}</option>
-                  {gridColumns.map((col) => (
-                    <option key={col} value={col}>
-                      {col}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-sm">
-                <span className="font-medium text-ink">{t("analysis.gridSortDir")}</span>
-                <select
-                  className={`${sortSelectClass} mt-1`}
-                  value={gridSortDir}
-                  onChange={(e) => setGridSortDir(e.target.value)}
-                  disabled={!gridEnabled || !gridSortColumn}
-                >
-                  <option value="ASC">{t("analysis.gridSortAsc")}</option>
-                  <option value="DESC">{t("analysis.gridSortDesc")}</option>
-                </select>
-              </label>
-            </div>
-            <label htmlFor="grid_prompt" className="mt-3 block text-xs font-medium text-muted">
-              {t("analysis.additionalPrompt")}
-            </label>
-            <textarea
-              id="grid_prompt"
-              value={gridPrompt}
-              onChange={(e) => setGridPrompt(e.target.value)}
-              className={`${extraPromptClass} mt-1`}
-              placeholder={t("analysis.additionalPromptPlaceholder")}
-              disabled={!gridEnabled}
-            />
-          </AnalysisSection>
-
-          <AnalysisSection
-            title={t("analysis.modeChart")}
-            enableable
-            enabled={chartEnabled}
-            onEnabledChange={(next) => setOutputEnabled("chart", next)}
-          >
-            <p className="sr-only">{t("analysis.chartMultiHint")}</p>
-            <div
-              className="flex flex-wrap gap-2"
-              role="group"
-              aria-label={t("analysis.chart")}
+            <AnalysisSection
+              title={t("analysis.modeGrid")}
+              description={t("analysis.modeGridHint")}
+              icon={<Table2 className="size-5" aria-hidden="true" />}
+              sectionKey="grid"
+              enableable
+              enabled={gridEnabled}
+              onEnabledChange={(next) => setOutputEnabled("grid", next)}
             >
-              {chartTypes.map((item) => {
-                const pressed = chartTypesSelected.includes(item.value);
-                const atCap = !pressed && chartTypesSelected.length >= 4;
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.value}
-                    type="button"
-                    title={item.label}
-                    aria-label={item.label}
-                    aria-pressed={pressed}
-                    disabled={!chartEnabled || atCap}
-                    onClick={() => toggleChartType(item.value)}
-                    className={chartIconBtnClass(pressed, atCap)}
+              <GridColumnInput columns={gridColumns} onChange={setGridColumns} />
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="block text-sm">
+                  <span className="font-medium text-ink">{t("analysis.gridSort")}</span>
+                  <select
+                    className={`${sortSelectClass} mt-1 min-w-[8rem]`}
+                    value={gridSortColumn}
+                    onChange={(e) => setGridSortColumn(e.target.value)}
                   >
-                    <Icon className="size-8" aria-hidden="true" />
-                  </button>
-                );
-              })}
-            </div>
-            <label htmlFor="chart_prompt" className="mt-3 block text-xs font-medium text-muted">
-              {t("analysis.additionalPrompt")}
-            </label>
-            <textarea
-              id="chart_prompt"
-              value={chartPrompt}
-              onChange={(e) => setChartPrompt(e.target.value)}
-              className={`${extraPromptClass} mt-1`}
-              placeholder={t("analysis.additionalPromptPlaceholder")}
-              disabled={!chartEnabled}
-            />
-          </AnalysisSection>
+                    <option value="">{t("common.noneDash")}</option>
+                    {gridColumns.map((col) => (
+                      <option key={col} value={col}>
+                        {col}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-sm">
+                  <span className="font-medium text-ink">{t("analysis.gridSortDir")}</span>
+                  <select
+                    className={`${sortSelectClass} mt-1`}
+                    value={gridSortDir}
+                    onChange={(e) => setGridSortDir(e.target.value)}
+                    disabled={!gridSortColumn}
+                  >
+                    <option value="ASC">{t("analysis.gridSortAsc")}</option>
+                    <option value="DESC">{t("analysis.gridSortDesc")}</option>
+                  </select>
+                </label>
+              </div>
+              <OptionalPromptField
+                id="grid_prompt"
+                value={gridPrompt}
+                onChange={(e) => setGridPrompt(e.target.value)}
+                placeholder={t("analysis.additionalPromptPlaceholder")}
+                t={t}
+              />
+            </AnalysisSection>
+
+            <AnalysisSection
+              title={t("analysis.modeResearch")}
+              description={t("analysis.modeResearchHint")}
+              icon={<Search className="size-5" aria-hidden="true" />}
+              sectionKey="research"
+              enableable
+              enabled={researchEnabled}
+              onEnabledChange={(next) => setOutputEnabled("research", next)}
+            >
+              <OptionalPromptField
+                id="research_prompt"
+                value={researchPrompt}
+                onChange={(e) => setResearchPrompt(e.target.value)}
+                placeholder={t("analysis.additionalPromptPlaceholder")}
+                t={t}
+              />
+            </AnalysisSection>
+          </div>
         </div>
 
-        <div className="flex justify-end border-t border-line/50 pt-3">
+        <div
+          className="sticky bottom-0 z-10 -mx-4 flex flex-col gap-3 border-t border-line/50 bg-paper/95 px-4 py-3 backdrop-blur-sm sm:-mx-5 sm:flex-row sm:items-center sm:justify-between sm:px-5"
+        >
+          <p className="text-sm text-muted" role="status">{runSummary}</p>
           <IconButton
             type="submit"
             icon={Play}
