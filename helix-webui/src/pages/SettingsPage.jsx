@@ -20,8 +20,12 @@ import {
   Settings as SettingsIcon,
   Sun,
   Upload,
+  CircleHelp,
+  User,
 } from "lucide-react";
 import { version as appVersion } from "../../package.json";
+import AdminGuideDownloadCard from "../components/AdminGuideDownloadCard.jsx";
+import AboutMePage from "./AboutMePage.jsx";
 import LogsPage from "./LogsPage.jsx";
 import McpPage from "./McpPage.jsx";
 import {
@@ -47,7 +51,6 @@ import FlashMessage from "../components/FlashMessage.jsx";
 import IconButton from "../components/IconButton.jsx";
 import LlmChatTester from "../components/LlmChatTester.jsx";
 import ModelCombobox from "../components/ModelCombobox.jsx";
-import PageHeader from "../components/PageHeader.jsx";
 import { useApiStatus } from "../context/ApiStatusContext.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
 import { failMessage, translateKnownMessage } from "../i18n/apiErrors.js";
@@ -146,6 +149,11 @@ const TAB_ALIASES = {
   openrouter: "llm",
   sql: "database",
   connection: "llm",
+  guide: "help",
+  documentation: "help",
+  admin: "help",
+  "admin-guide": "help",
+  "about-me": "about",
 };
 
 function engineLabel(t, value) {
@@ -176,6 +184,8 @@ function tabIcon(tabId) {
   if (tabId === "update") return Download;
   if (tabId === "feedback") return MessageSquare;
   if (tabId === "logs") return ScrollText;
+  if (tabId === "help") return CircleHelp;
+  if (tabId === "about") return User;
   return SettingsIcon;
 }
 
@@ -487,17 +497,6 @@ export default function SettingsPage() {
   const { theme, setTheme } = useOutletContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
-  if (tabParam === "about") {
-    return <Navigate to="/help?tab=about" replace />;
-  }
-  if (
-    tabParam === "guide" ||
-    tabParam === "documentation" ||
-    tabParam === "admin" ||
-    tabParam === "admin-guide"
-  ) {
-    return <Navigate to="/help" replace />;
-  }
   const requestedTab = TAB_ALIASES[tabParam] || tabParam;
 
   const tabs = useMemo(
@@ -510,6 +509,8 @@ export default function SettingsPage() {
       { id: "update", label: t("settings.tabUpdate") },
       { id: "feedback", label: t("settings.tabFeedback") },
       { id: "status", label: t("settings.tabStatus") },
+      { id: "help", label: t("settings.tabHelp") },
+      { id: "about", label: t("settings.tabAbout") },
     ],
     [t],
   );
@@ -1091,7 +1092,6 @@ export default function SettingsPage() {
 
   return (
     <div className="flex min-h-0 flex-1 w-full flex-col overflow-hidden">
-      <PageHeader icon={SettingsIcon} title={t("settings.title")} />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
       <aside className="flex shrink-0 flex-col gap-2 border-b border-line/80 bg-paper/50 p-2 md:w-1/4 md:min-w-[10rem] md:max-w-[16rem] md:border-b-0 md:border-e">
         <nav
@@ -1283,6 +1283,13 @@ export default function SettingsPage() {
       {activeSection === "update" ? <UpdateSection /> : null}
       {activeSection === "feedback" ? <FeedbackSection /> : null}
       {activeSection === "logs" ? <LogsPage /> : null}
+      {activeSection === "help" ? (
+        <div className="space-y-3">
+          <p className="text-sm text-muted">{t("help.intro")}</p>
+          <AdminGuideDownloadCard />
+        </div>
+      ) : null}
+      {activeSection === "about" ? <AboutMePage embedded /> : null}
 
       {activeSection === "llm" ? (
         <>
