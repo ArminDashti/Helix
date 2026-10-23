@@ -11,6 +11,8 @@ import {
   CircleDot,
   Globe,
   Play,
+  Search,
+  Table2,
   Zap,
 } from "lucide-react";
 import { fetchAgents, streamRun, answerRun, createResult } from "../api/client.js";
@@ -92,6 +94,30 @@ function chartIconBtnClass(pressed, atCap) {
       : "border-line/80 bg-fog/30 text-muted hover:border-line hover:bg-fog/60 hover:text-ink",
     atCap ? "cursor-not-allowed opacity-50" : "",
   ].join(" ");
+}
+
+function OptionalPromptField({ id, value, onChange, placeholder, t }) {
+  return (
+    <details className="mt-4 rounded-xl border border-line/55 bg-fog/10 open:border-line/70 open:bg-fog/15">
+      <summary className="cursor-pointer list-none px-3 py-2.5 text-sm font-medium text-ink [&::-webkit-details-marker]:hidden">
+        <span className="flex items-center justify-between gap-2">
+          <span>{t("analysis.additionalPrompt")}</span>
+          <span className="text-xs font-normal text-muted">
+            {t("analysis.optional")}
+          </span>
+        </span>
+      </summary>
+      <div className="border-t border-line/40 px-3 pb-3 pt-2">
+        <textarea
+          id={id}
+          value={value}
+          onChange={onChange}
+          className={extraPromptClass}
+          placeholder={placeholder}
+        />
+      </div>
+    </details>
+  );
 }
 
 export default function AnalysisPage() {
