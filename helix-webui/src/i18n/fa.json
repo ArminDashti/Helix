@@ -524,6 +524,8 @@
     "tabStatus": "وضعیت",
     "tabUpdate": "به‌روزرسانی",
     "tabFeedback": "بازخورد",
+    "tabHelp": "راهنما",
+    "tabAbout": "درباره من",
     "tabServer": "سرور",
     "serverIntro": "جزئیات میزبان و محیط اجرای API Helix.",
     "serverRefresh": "بازخوانی",
@@ -989,6 +991,7 @@
     "delete": "حذف"
   }
 }
+
 
 
 

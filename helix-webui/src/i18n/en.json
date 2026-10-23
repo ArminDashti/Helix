@@ -524,6 +524,8 @@
     "tabStatus": "Status",
     "tabUpdate": "Update",
     "tabFeedback": "Feedback",
+    "tabHelp": "Help",
+    "tabAbout": "About Me",
     "tabServer": "Server",
     "serverIntro": "Host and runtime details for the machine running the Helix API.",
     "serverRefresh": "Refresh",
@@ -989,6 +991,7 @@
     "delete": "Delete"
   }
 }
+
 
 
 
