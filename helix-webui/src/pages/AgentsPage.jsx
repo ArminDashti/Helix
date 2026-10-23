@@ -131,6 +131,13 @@ export default function AgentsPage() {
 
   const columns = [
     {
+      key: "id",
+      label: t("common.id"),
+      render: (agent) => (
+        <span className="font-mono text-sm text-ink">{agent.id}</span>
+      ),
+    },
+    {
       key: "name",
       label: t("common.name"),
       render: (agent) => {
@@ -144,8 +151,8 @@ export default function AgentsPage() {
       },
     },
     {
-      key: "role",
-      label: t("agents.colRole"),
+      key: "description",
+      label: t("agents.description"),
       render: (agent) =>
         agent.description || (
           <span className="text-muted">{t("common.noneDash")}</span>
