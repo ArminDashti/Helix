@@ -13,6 +13,7 @@ import {
   Monitor,
   MessageSquare,
   Moon,
+  Plug,
   RefreshCw,
   Save,
   ScrollText,
@@ -22,6 +23,7 @@ import {
 } from "lucide-react";
 import { version as appVersion } from "../../package.json";
 import LogsPage from "./LogsPage.jsx";
+import McpPage from "./McpPage.jsx";
 import {
   fetchAgents,
   fetchBranding,
@@ -169,6 +171,7 @@ function isSampleDbName(name) {
 function tabIcon(tabId) {
   if (tabId === "general") return Building2;
   if (tabId === "database") return Database;
+  if (tabId === "mcp") return Plug;
   if (tabId === "status") return Activity;
   if (tabId === "update") return Download;
   if (tabId === "feedback") return MessageSquare;
@@ -502,6 +505,7 @@ export default function SettingsPage() {
       { id: "general", label: t("settings.tabGeneral") },
       { id: "llm", label: t("settings.tabLlm") },
       { id: "database", label: t("settings.tabDatabase") },
+      { id: "mcp", label: t("settings.tabMcp") },
       { id: "logs", label: t("nav.logs") },
       { id: "update", label: t("settings.tabUpdate") },
       { id: "feedback", label: t("settings.tabFeedback") },
@@ -1274,6 +1278,7 @@ export default function SettingsPage() {
         </div>
       ) : null}
 
+      {activeSection === "mcp" ? <McpPage embedded /> : null}
       {activeSection === "status" ? <StatusLogsSection /> : null}
       {activeSection === "update" ? <UpdateSection /> : null}
       {activeSection === "feedback" ? <FeedbackSection /> : null}
