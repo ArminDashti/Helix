@@ -221,11 +221,12 @@ export async function createAgent({
   id,
   name,
   description = "",
+  icon,
 }) {
   return requestJson("/api/agents/", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, name, description }),
+    body: JSON.stringify({ id, name, description, icon }),
   });
 }
 
@@ -295,6 +296,44 @@ export async function fetchSkills(scope) {
   return data.skills;
 }
 
+
+export async function fetchReportTemplates({ includeDisabled = false } = {}) {
+  const qs = includeDisabled ? "?include_disabled=1" : "";
+  const data = await requestJson(`/api/report-templates/${qs}`);
+  return data.templates;
+}
+
+export async function createReportTemplate(payload) {
+  return requestJson("/api/report-templates/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateReportTemplate(templateId, payload) {
+  return requestJson(
+    `/api/report-templates/${encodeURIComponent(templateId)}/`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function deleteReportTemplate(templateId) {
+  const path = `/api/report-templates/${encodeURIComponent(templateId)}/`;
+  const res = await apiFetch(path, { method: "DELETE" });
+  if (!res.ok && res.status !== 204) {
+    await parseJson(res, path);
+  }
+  try {
+    notifyMutation(path, "DELETE");
+  } catch {
+    /* ignore */
+  }
+}
 export async function createSkill({
   id,
   scope,
@@ -417,6 +456,10 @@ export async function fetchLatestRelease() {
   return requestJson("/api/app/update/");
 }
 
+export async function fetchServerInfo() {
+  return requestJson("/api/server-info/");
+}
+
 export async function sendFeedback(payload) {
   return requestJson("/api/app/feedback/", {
     method: "POST",
@@ -464,6 +507,11 @@ export async function deleteUser(userId) {
   });
 }
 
+export async function fetchAdminUsage() {
+  const data = await requestJson("/api/admin/usage/");
+  return data.usage || [];
+}
+
 export async function fetchOpenRouterSettings() {
   return requestJson("/api/admin/openrouter/");
 }
@@ -487,39 +535,6 @@ export async function testOpenRouterChat({ message, model, system_prompt } = {})
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, model, system_prompt }),
   });
-}
-
-export async function fetchPipelineBundle() {
-  return requestJson("/api/admin/pipeline-graph/");
-}
-
-export async function fetchPipelineGraph() {
-  const data = await fetchPipelineBundle();
-  return data.pipeline_graph;
-}
-
-export async function savePipelineBundle(payload) {
-  return requestJson("/api/admin/pipeline-graph/", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function savePipelineGraph(pipeline_graph) {
-  const data = await savePipelineBundle({ pipeline_graph });
-  return data.pipeline_graph;
-}
-
-export async function resetPipelineBundle() {
-  return requestJson("/api/admin/pipeline-graph/", {
-    method: "DELETE",
-  });
-}
-
-export async function resetPipelineGraph() {
-  const data = await resetPipelineBundle();
-  return data.pipeline_graph;
 }
 
 export async function fetchDocsTables() {
@@ -761,6 +776,10 @@ export async function deleteMcp(name) {
 
 export async function configureSqlServerMcp() {
   return requestJson("/api/mcp/sqlserver/", { method: "POST" });
+}
+
+export async function testSqlServerMcp() {
+  return requestJson("/api/mcp/sqlserver/test/", { method: "POST" });
 }
 
 /**
@@ -1078,3 +1097,4 @@ export async function runChat(
   });
   return response;
 }
+

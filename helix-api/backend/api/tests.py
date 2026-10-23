@@ -83,6 +83,26 @@ class DataFileImportTests(SimpleTestCase):
 
 
 class PipelineAgentTests(SimpleTestCase):
+    def test_agent_icon_round_trip(self):
+        from .config_loader import (
+            DEFAULT_AGENT_ICON,
+            get_agent_meta,
+            normalize_agent_icon,
+            update_agent_fields,
+        )
+
+        self.assertEqual(normalize_agent_icon("brain"), "brain")
+        with self.assertRaises(ValueError):
+            normalize_agent_icon("not-an-icon")
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "helix.config.yaml"
+            with override_settings(HELIX_CONFIG_PATH=str(config_path)):
+                save_config({})
+                meta = update_agent_fields("orchester", icon="microscope")
+                self.assertEqual(meta["icon"], "microscope")
+                self.assertEqual(get_agent_meta("orchester")["icon"], "microscope")
+                self.assertEqual(get_agent_meta("researcher")["icon"], DEFAULT_AGENT_ICON)
+
     def test_seed_pipeline_agents_are_listed_and_deletable(self):
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "helix.config.yaml"
@@ -242,7 +262,7 @@ class ThreeAgentPipelineTests(SimpleTestCase):
         }
         with patch("api.pipeline_run.execute_select") as exe:
             exe.side_effect = ValueError("Invalid object name")
-            result_json = _dispatch_tool("execute_select", {"sql": "SELECT 1"}, ctx)
+            result_json, _done = _dispatch_tool("execute_select", {"sql": "SELECT 1"}, ctx)
         self.assertIn("Invalid object name", result_json)
         self.assertIn("Invalid object name", ctx.get("last_error") or "")
 
@@ -303,8 +323,12 @@ class ThreeAgentPipelineTests(SimpleTestCase):
     def test_only_orchester_and_researcher_can_ask_the_operator(self):
         from .pipeline_langgraph import _RESUME_NODES, _researcher_tools
 
-        names = {tool["function"]["name"] for tool in _researcher_tools()}
+        ctx = {"enable_web_search": False}
+        names = {tool["function"]["name"] for tool in _researcher_tools(ctx)}
         self.assertEqual(names, {"describe_table", "sample_rows", "execute_select"})
+        with patch("api.pipeline_run.web_search_allowed", return_value=True):
+            on = {tool["function"]["name"] for tool in _researcher_tools({})}
+        self.assertIn("search_web", on)
         self.assertEqual(set(_RESUME_NODES), {"orchester", "researcher"})
 
     def test_retired_agents_are_not_pipeline_nodes(self):
@@ -342,6 +366,71 @@ class ThreeAgentPipelineTests(SimpleTestCase):
         self.assertIn("## Live catalog", prompt)
         self.assertIn("NameMoshtary", prompt)
 
+
+
+
+class WebSearchTests(SimpleTestCase):
+    def test_normalize_web_search_queries(self):
+        from .pipeline_run import _normalize_web_search_queries
+
+        self.assertEqual(
+            _normalize_web_search_queries([" inflation ", "rates", "rates", "", 4, 5, 6]),
+            ["inflation", "rates", "4"],
+        )
+
+    def test_search_web_tool_sets_brief(self):
+        from .pipeline_run import _dispatch_tool
+
+        ctx: dict = {"artifacts": {}, "enable_web_search": True}
+        with patch("api.pipeline_run.search_web") as search:
+            search.return_value = [
+                {
+                    "query": "retail margin",
+                    "title": "Bench",
+                    "url": "https://example.com",
+                    "snippet": "10%",
+                }
+            ]
+            with patch("api.pipeline_run.web_search_enabled", return_value=True):
+                result_json, done = _dispatch_tool(
+                    "search_web",
+                    {"queries": ["retail margin"], "objective": "benchmarks"},
+                    ctx,
+                )
+        self.assertFalse(done)
+        self.assertTrue(ctx.get("_web_search_invoked"))
+        self.assertIn("Bench", ctx.get("web_search_brief") or "")
+        self.assertIn('"ok":true', result_json.lower().replace(" ", ""))
+
+    def test_web_search_tool_follows_the_disabled_agent_list(self):
+        from .pipeline_run import active_tools
+        from .config_loader import save_config
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "helix.config.yaml"
+            with override_settings(HELIX_CONFIG_PATH=str(config_path)):
+                save_config({"disabled_agents": ["web-searcher"]})
+                off = [tool["function"]["name"] for tool in active_tools()]
+                self.assertNotIn("search_web", off)
+                self.assertIn("execute_select", off)
+                self.assertEqual(
+                    [tool["function"]["name"] for tool in active_tools(("execute_select", "search_web"))],
+                    ["execute_select"],
+                )
+                save_config({"disabled_agents": []})
+                on = [tool["function"]["name"] for tool in active_tools()]
+                self.assertIn("search_web", on)
+
+    def test_disabled_web_search_cannot_be_dispatched(self):
+        from .pipeline_run import _dispatch_tool
+
+        ctx: dict = {"artifacts": {}}
+        with patch("api.pipeline_run.web_search_enabled", return_value=False):
+            with patch("api.pipeline_run.search_web") as search:
+                payload, done = _dispatch_tool("search_web", {"queries": ["x"]}, ctx)
+        self.assertFalse(done)
+        self.assertIn("disabled", payload)
+        search.assert_not_called()
 
 class ResearcherAssumptionsTests(SimpleTestCase):
     def test_normalize_researcher_assumptions_keeps_documented_and_guessed(self):
@@ -2130,6 +2219,16 @@ class TokenUsageTests(SimpleTestCase):
         self.assertGreater(totals["total_tokens"], 0)
         self.assertGreater(totals["prompt_tokens"], totals["completion_tokens"])
 
+    def test_record_call_collects_distinct_models(self):
+        from .token_usage import record_call, snapshot
+
+        ctx: dict = {"report_type": "standard"}
+        record_call(ctx, "orchester", messages=[], reply="a", usage={"total_tokens": 1}, model="gpt-4.1")
+        record_call(ctx, "researcher", messages=[], reply="b", usage={"total_tokens": 1}, model="gpt-4.1")
+        record_call(ctx, "researcher", messages=[], reply="c", usage={"total_tokens": 1}, model="claude-sonnet-4-5")
+        snap = snapshot(ctx)
+        self.assertEqual(snap["models"], ["gpt-4.1", "claude-sonnet-4-5"])
+
     def test_totals_accumulate_across_calls_and_agents(self):
         from .token_usage import record_call, snapshot
 
@@ -2329,6 +2428,22 @@ class ResultsStoreTests(SimpleTestCase):
                 listed = results_store.list_results()
                 self.assertEqual(listed[0]["duration_s"], 12.44)
 
+    def test_create_result_persists_creator_in_list_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with override_settings(MARKDOWN_FILES_DIR=tmp):
+                from . import results_store
+
+                item = results_store.create_result(
+                    prompt="by armin",
+                    mode="grid",
+                    language="en",
+                    payload={},
+                    creator_display_name="Armin Dashti",
+                )
+                self.assertEqual(item["creator_display_name"], "Armin Dashti")
+                listed = results_store.list_results()[0]
+                self.assertEqual(listed["creator_display_name"], "Armin Dashti")
+
     def test_create_result_ignores_invalid_duration(self):
         with tempfile.TemporaryDirectory() as tmp:
             with override_settings(MARKDOWN_FILES_DIR=tmp):
@@ -2344,6 +2459,28 @@ class ResultsStoreTests(SimpleTestCase):
                 self.assertIsNone(item["duration_s"])
                 listed = results_store.list_results()
                 self.assertIsNone(listed[0]["duration_s"])
+
+    def test_list_summary_includes_models_from_payload_token_usage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with override_settings(MARKDOWN_FILES_DIR=tmp):
+                from . import results_store
+
+                results_store.create_result(
+                    prompt="models",
+                    mode="grid",
+                    language="en",
+                    payload={
+                        "token_usage": {
+                            "total_tokens": 10,
+                            "calls": 1,
+                            "models": ["gpt-4.1", "claude-sonnet-4-5"],
+                        }
+                    },
+                )
+                listed = results_store.list_results()[0]
+                self.assertEqual(
+                    listed["models"], ["gpt-4.1", "claude-sonnet-4-5"]
+                )
 
     def test_create_result_persists_tokens_and_retrieval_in_list_summary(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2609,3 +2746,18 @@ class OrgUserAuthTests(SimpleTestCase):
                 self.assertIsNotNone(user)
                 self.assertTrue(user["is_admin"])
                 self.assertIsNone(org.authenticate_user("armin", "wrong-password"))
+
+
+class ServerInfoEndpointTests(SimpleTestCase):
+    def test_server_info_returns_host_facts(self):
+        from django.test import Client
+
+        client = Client()
+        resp = client.get("/api/server-info/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("hostname", data)
+        self.assertIn("platform", data)
+        self.assertIn("python_version", data)
+        self.assertIn("database_engine", data)
+        self.assertIn("paths", data)

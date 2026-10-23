@@ -11,7 +11,7 @@ from . import logs_store
 from . import markdown_store as store
 from . import token_usage
 from .chart_payload import build_echarts_option, build_grid
-from .config_loader import get_provider, provider_label
+from .config_loader import get_provider, provider_label, web_search_enabled
 from .demo import VALID_CHART_TYPES, _normalize_report_type
 from .jalali_dates import calendar_hint_for_prompt
 from .llm_client import require_llm
@@ -20,6 +20,7 @@ from .pipeline_graph import (
     get_pipeline_graph_for_mode,
 )
 from .sql_execute import _sql_error_message, execute_select
+from .web_search import search_web
 
 DATA_GATHERER_MAX_ROWS = 500
 MAX_STEP_LOG_ENTRIES = 30
@@ -28,6 +29,68 @@ def max_tool_turns() -> int:
     from .config_loader import get_researcher_settings
 
     return int(get_researcher_settings()["max_turns"])
+
+
+SEARCH_WEB_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "search_web",
+        "description": (
+            "Search the public web for facts outside the connected database "
+            "(benchmarks, news, industry rates). Pass 1–3 short queries."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "queries": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "1–3 search queries",
+                },
+                "objective": {
+                    "type": "string",
+                    "description": "Why these queries matter for the user prompt",
+                },
+            },
+            "required": ["queries"],
+        },
+    },
+}
+
+
+def web_search_allowed(ctx: dict[str, Any]) -> bool:
+    if not web_search_enabled():
+        return False
+    return ctx.get("enable_web_search") is not False
+
+
+def active_tools(names: tuple[str, ...] | None = None) -> list[dict[str, Any]]:
+    blocked = set() if web_search_enabled() else {"search_web"}
+    pool = [EXECUTE_SELECT_TOOL, SEARCH_WEB_TOOL]
+    out: list[dict[str, Any]] = []
+    for tool in pool:
+        fn = tool.get("function") if isinstance(tool, dict) else None
+        tool_name = str((fn or {}).get("name") or "")
+        if tool_name in blocked:
+            continue
+        if names is not None and tool_name not in names:
+            continue
+        out.append(tool)
+    return out
+
+
+def _normalize_web_search_queries(raw: Any) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    queries: list[str] = []
+    for item in raw:
+        text = str(item or "").strip()
+        if text and text not in queries:
+            queries.append(text)
+        if len(queries) >= 3:
+            break
+    return queries
+
 
 EXECUTE_SELECT_TOOL: dict[str, Any] = {
     "type": "function",
@@ -466,6 +529,7 @@ def _package_result(ctx: dict[str, Any]) -> dict[str, Any]:
         "verification": ctx.get("verification")
         if isinstance(ctx.get("verification"), dict)
         else None,
+        "web_search_brief": str(ctx.get("web_search_brief") or "").strip() or None,
     }
 
 
@@ -577,6 +641,11 @@ def _build_user_message(ctx: dict[str, Any]) -> str:
     answers = _operator_answers_text(ctx)
     if answers:
         parts.append(answers)
+    if web_search_allowed(ctx):
+        parts.append("enable_web_search=true")
+    brief = str(ctx.get("web_search_brief") or "").strip()
+    if brief:
+        parts.append(f"web_search_brief:\n{brief}")
     return "\n\n".join(parts)
 
 
@@ -592,33 +661,94 @@ def _parse_tool_args(raw: Any) -> dict[str, Any]:
     return {}
 
 
-def _dispatch_tool(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> str:
-    """Run one tool and return its result as JSON."""
-    if name != "execute_select":
-        return json.dumps({"ok": False, "error": f"Unknown tool: {name}"})
-    sql_text = str(args.get("sql") or "").strip()
-    if not sql_text:
-        return json.dumps({"ok": False, "error": "sql is required"})
-    try:
-        fetch = execute_select(sql_text, row_cap=DATA_GATHERER_MAX_ROWS, actor=ctx.get("actor"))
-    except Exception as exc:  # noqa: BLE001
-        err = _sql_error_message(exc)
-        ctx["last_error"] = err
-        return json.dumps({"ok": False, "error": err})
-    ctx["sql_fetch"] = fetch
-    ctx.pop("last_error", None)
-    rows = fetch.get("rows") or []
-    return json.dumps(
-        {
-            "ok": True,
-            "sql": fetch.get("sql"),
-            "columns": fetch.get("columns"),
-            "row_count": len(rows),
-            "preview": rows[:20],
-        },
-        ensure_ascii=False,
-        default=str,
-    )
+def _dispatch_tool(
+    name: str,
+    args: dict[str, Any],
+    ctx: dict[str, Any],
+) -> tuple[str, bool]:
+    """Run one tool. Returns (result_json, done)."""
+    if name == "execute_select":
+        sql_text = str(args.get("sql") or "").strip()
+        if not sql_text:
+            return json.dumps({"ok": False, "error": "sql is required"}), False
+        try:
+            fetch = execute_select(
+                sql_text, row_cap=DATA_GATHERER_MAX_ROWS, actor=ctx.get("actor")
+            )
+        except Exception as exc:  # noqa: BLE001
+            err = _sql_error_message(exc)
+            ctx["last_error"] = err
+            return json.dumps({"ok": False, "error": err}), False
+        ctx["sql_fetch"] = fetch
+        ctx.pop("last_error", None)
+        rows = fetch.get("rows") or []
+        return (
+            json.dumps(
+                {
+                    "ok": True,
+                    "sql": fetch.get("sql"),
+                    "columns": fetch.get("columns"),
+                    "row_count": len(rows),
+                    "preview": rows[:20],
+                },
+                ensure_ascii=False,
+                default=str,
+            ),
+            False,
+        )
+
+    if name == "search_web":
+        if not web_search_allowed(ctx):
+            return json.dumps({"ok": False, "error": "web search is disabled"}), False
+        queries = _normalize_web_search_queries(args.get("queries"))
+        if not queries:
+            return json.dumps({"ok": False, "error": "queries required (1–3)"}), False
+        if ctx.get("_web_search_invoked"):
+            return (
+                json.dumps(
+                    {
+                        "ok": True,
+                        "cached": True,
+                        "web_search_brief": ctx.get("web_search_brief") or "",
+                    },
+                    ensure_ascii=False,
+                ),
+                False,
+            )
+        hits = search_web(queries)
+        ctx["_web_search_invoked"] = True
+        brief_lines: list[str] = []
+        for hit in hits:
+            if hit.get("error"):
+                brief_lines.append(f"- error ({hit.get('query')}): {hit.get('error')}")
+                continue
+            title = hit.get("title") or "result"
+            url = hit.get("url") or ""
+            snippet = hit.get("snippet") or ""
+            if url:
+                brief_lines.append(f"- [{title}]({url}): {snippet}")
+            else:
+                brief_lines.append(f"- {title}: {snippet}")
+        objective = str(args.get("objective") or "").strip()
+        brief = ""
+        if objective:
+            brief += f"Objective: {objective}\n"
+        brief += "\n".join(brief_lines) if brief_lines else "No web results."
+        ctx["web_search_brief"] = brief
+        ctx.setdefault("artifacts", {})["web-search"] = {
+            "queries": queries,
+            "hit_count": len(hits),
+            "text": brief,
+        }
+        return (
+            json.dumps(
+                {"ok": True, "web_search_brief": brief, "hit_count": len(hits)},
+                ensure_ascii=False,
+            ),
+            False,
+        )
+
+    return json.dumps({"ok": False, "error": f"Unknown tool: {name}"}), False
 
 
 def _assistant_message_for_history(message: dict[str, Any]) -> dict[str, Any]:
@@ -670,6 +800,7 @@ def pipeline_events(
     chart_types: list[str] | None = None,
     columns: list[str] | None = None,
     allow_operator_questions: bool = True,
+    enable_web_search: bool = True,
     actor: dict[str, Any] | None = None,
 ) -> Iterator[str]:
     from .researcher_turn_loop import detect_prompt_language
@@ -684,6 +815,7 @@ def pipeline_events(
         "chart_types": chart_types,
         "columns": columns,
         "allow_operator_questions": allow_operator_questions,
+        "enable_web_search": enable_web_search,
         "actor": actor or {"username": "guest", "is_admin": False, "is_guest": True},
         "artifacts": {},
         "run_id": uuid.uuid4().hex,
@@ -872,6 +1004,7 @@ def run_pipeline_sync(
     chart_types: list[str] | None = None,
     columns: list[str] | None = None,
     allow_operator_questions: bool = True,
+    enable_web_search: bool = True,
     actor: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     result: dict[str, Any] | None = None
@@ -886,6 +1019,7 @@ def run_pipeline_sync(
         chart_types=chart_types,
         columns=columns,
         allow_operator_questions=allow_operator_questions,
+        enable_web_search=enable_web_search,
         actor=actor,
     ):
         line = chunk.strip()

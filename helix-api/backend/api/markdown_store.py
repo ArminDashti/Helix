@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}$")
 SKILL_DISPLAY_NAMES = {
     "orchestrate-pipeline": "orchestrate-pipeline",
+    "verify-research-access": "verify-research-access",
+    "sanitize-response-privacy": "sanitize-response-privacy",
+    "generate-optimized-select": "generate-optimized-select",
     "echarts-response": "ECharts response",
     "sql-safety": "SQL safety",
     "text-report": "Text report",
@@ -423,8 +426,6 @@ def list_skills(scope: str | None = None) -> list[dict]:
     return items
 
 
-_MULTI_SKILL_AGENT_IDS = frozenset({"researcher"})
-
 
 def agent_asset_issues() -> list[str]:
     """Report agents whose skill assignments drift from the roster contract.
@@ -438,7 +439,7 @@ def agent_asset_issues() -> list[str]:
 
     for agent_id in SYNC_AGENT_IDS:
         owned_skills = [skill["id"] for skill in skills if agent_id in (skill.get("agents") or [])]
-        expected = 2 if agent_id in _MULTI_SKILL_AGENT_IDS else 1
+        expected = len(_parse_agent_md_skill_ids(agent_id)) or 1
         if len(owned_skills) != expected:
             issues.append(
                 f"{agent_id}: expected {expected} skill(s), found {len(owned_skills)} "

@@ -15,10 +15,11 @@ const hmrClientPort = Number(process.env.VITE_HMR_CLIENT_PORT || 5173);
 // ponytail: no Workbox dependency; precache list is build output only, not public/docs PDFs.
 const swSourcePath = join(import.meta.dirname, "public", "sw.js");
 
-function fillServiceWorker(source, { precache, dev }) {
+function fillServiceWorker(source, { precache, dev, buildId }) {
+  const id = buildId ?? (dev ? "dev" : Date.now().toString(36));
   return source
     .replaceAll("__PRECACHE_URLS__", JSON.stringify(precache))
-    .replaceAll("__BUILD_ID__", Date.now().toString(36))
+    .replaceAll("__BUILD_ID__", id)
     .replaceAll("__DEV__", String(dev));
 }
 
@@ -40,9 +41,23 @@ function pwaServiceWorker() {
         const files = readdirSync(outDir, { recursive: true, withFileTypes: true })
           .filter((entry) => entry.isFile())
           .map((entry) => relative(outDir, join(entry.parentPath, entry.name)).split(sep).join("/"))
-          .filter((file) => file !== "sw.js" && (file.startsWith("assets/") || /^[^/]+\.(png|svg|webmanifest)$/.test(file)));
+          .filter(
+            (file) =>
+              file !== "sw.js" &&
+              (file === "index.html" ||
+                file.startsWith("assets/") ||
+                /^[^/]+\.(png|svg|webmanifest)$/.test(file)),
+          );
         const swPath = join(outDir, "sw.js");
-        writeFileSync(swPath, fillServiceWorker(readFileSync(swPath, "utf8"), { precache: ["", ...files], dev: false }));
+        const precache = [
+          "",
+          "index.html",
+          ...files.filter((file) => file !== "index.html"),
+        ];
+        writeFileSync(
+          swPath,
+          fillServiceWorker(readFileSync(swSourcePath, "utf8"), { precache, dev: false }),
+        );
       },
     },
   };
@@ -76,4 +91,6 @@ export default defineConfig({
     },
   },
 });
+
+
 

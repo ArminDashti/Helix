@@ -487,6 +487,14 @@ export default function SettingsPage() {
   if (tabParam === "about") {
     return <Navigate to="/help?tab=about" replace />;
   }
+  if (
+    tabParam === "guide" ||
+    tabParam === "documentation" ||
+    tabParam === "admin" ||
+    tabParam === "admin-guide"
+  ) {
+    return <Navigate to="/help" replace />;
+  }
   const requestedTab = TAB_ALIASES[tabParam] || tabParam;
 
   const tabs = useMemo(

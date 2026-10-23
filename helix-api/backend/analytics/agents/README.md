@@ -14,8 +14,8 @@ Two pipeline agents: **orchester** and **researcher**. Shared schema reference p
 
 | Agent | Skills |
 | --- | --- |
-| `orchester` | `orchestrate-pipeline` |
-| `researcher` | `generate-optimized-select`, `process-data` |
+| `orchester` | `orchestrate-pipeline`, `verify-research-access`, `sanitize-response-privacy` |
+| `Researcher` (`researcher`) | `generate-optimized-select`, `process-data` |
 
 Runtime copies live under `backend/markdown-files/` (seed-if-empty). Edit both when changing prompts.
 
@@ -25,3 +25,4 @@ Human → orchester → researcher → orchester → Human
 
 - Only orchester and researcher can ask the operator.
 - Failures travel back upstream through the orchester inbox.
+

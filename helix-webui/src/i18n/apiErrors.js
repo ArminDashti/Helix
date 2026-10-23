@@ -33,6 +33,7 @@ const EXACT_KEYS = {
   "content must be a string": "api.contentMustBeString",
   "agents must be a list": "api.agentsMustBeList",
   "assignments must be an object": "api.assignmentsObject",
+  "Template already exists": "api.templateExists",
   "Skill already exists": "api.skillExists",
   "Skill not found": "api.skillNotFound",
   "Result not found": "api.resultNotFound",
@@ -57,8 +58,6 @@ const EXACT_KEYS = {
   "Pipeline has no entry agent": "api.noEntryAgent",
   "pipeline_flow must be stages": "api.pipelineMustBeStages",
   "pipeline_flow must include at least one agent": "api.pipelineNeedsAgent",
-  "Arrange uses one IF per stage.": "pipeline.validate.arrangeIf",
-  "Add at least one stage.": "pipeline.validate.addStage",
   network: "errors.kind.network",
   parse: "errors.kind.parse",
   http: "errors.kind.http",
@@ -69,14 +68,6 @@ const EXACT_KEYS = {
 
 const HTTP_META = /^HTTP (\d+)$/;
 const API_STATUS = /^API error (\d+)$/;
-const STAGE_INVALID = /^Stage (\d+) is invalid\.$/;
-const STAGE_NEEDS_AGENT = /^Stage (\d+) needs an agent\.$/;
-const STAGE_ACTION = /^Stage (\d+) action must be IF, IF NOT, or Go to\.$/;
-const STAGE_GOTO = /^Stage (\d+) Go to needs a next agent\.$/;
-const STAGE_RESULT = /^Stage (\d+) needs a result value\.$/;
-const STAGE_RESULT_OP = /^Stage (\d+) Results must be Equal or Not Equal\.$/;
-const STAGE_THEN = /^Stage (\d+) THEN must be Go to or STOP\.$/;
-const STAGE_THEN_GOTO = /^Stage (\d+) THEN Go to needs a next agent\.$/;
 const CIRCUIT = /^Circuit open: edge (.+) limit (.+)$/;
 const RUNNING = /^Running (.+)…$/;
 const RECEIVED = /^Received prompt \((.+)\/(.+)\) via (.+): (.*)$/;
@@ -100,25 +91,9 @@ export function translateKnownMessage(t, text) {
     if (code === 400) return t("errors.http.badRequest");
     return t("errors.generic");
   }
-  match = STAGE_INVALID.exec(raw);
-  if (match) return t("pipeline.validate.stageInvalid", { n: match[1] });
-  match = STAGE_NEEDS_AGENT.exec(raw);
-  if (match) return t("pipeline.validate.stageNeedsAgent", { n: match[1] });
-  match = STAGE_ACTION.exec(raw);
-  if (match) return t("pipeline.validate.stageAction", { n: match[1] });
-  match = STAGE_GOTO.exec(raw);
-  if (match) return t("pipeline.validate.goToNeedsAgent", { n: match[1] });
-  match = STAGE_RESULT.exec(raw);
-  if (match) return t("pipeline.validate.needsResult", { n: match[1] });
-  match = STAGE_RESULT_OP.exec(raw);
-  if (match) return t("pipeline.validate.resultOp", { n: match[1] });
-  match = STAGE_THEN.exec(raw);
-  if (match) return t("pipeline.validate.then", { n: match[1] });
-  match = STAGE_THEN_GOTO.exec(raw);
-  if (match) return t("pipeline.validate.thenGoTo", { n: match[1] });
   match = CIRCUIT.exec(raw);
   if (match) {
-    return t("pipeline.circuitOpen", { id: match[1], cap: match[2] });
+    return raw;
   }
   match = RUNNING.exec(raw);
   if (match) return t("sse.running", { name: match[1] });
@@ -160,3 +135,4 @@ export function translateApiError(t, error) {
       : error.reasons,
   };
 }
+

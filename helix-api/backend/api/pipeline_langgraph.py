@@ -622,11 +622,14 @@ def _researcher_fail(state: PipelineState, ctx: dict[str, Any], err: str) -> Pip
     return state
 
 
-def _researcher_tools() -> list[dict[str, Any]]:
-    from .pipeline_run import EXECUTE_SELECT_TOOL
+def _researcher_tools(ctx: dict[str, Any]) -> list[dict[str, Any]]:
+    from .pipeline_run import EXECUTE_SELECT_TOOL, SEARCH_WEB_TOOL, web_search_allowed
     from .sql_expert_tools import SQL_EXPERT_TOOLS
 
-    return SQL_EXPERT_TOOLS + [EXECUTE_SELECT_TOOL]
+    tools: list[dict[str, Any]] = SQL_EXPERT_TOOLS + [EXECUTE_SELECT_TOOL]
+    if web_search_allowed(ctx):
+        tools.append(SEARCH_WEB_TOOL)
+    return tools
 
 
 _RESEARCHER_TASK = (
@@ -634,6 +637,7 @@ _RESEARCHER_TASK = (
     "You are the only agent that talks to the database. Use describe_table, sample_rows, and "
     "execute_select to fetch the rows that answer the goals, then write the result from those "
     "preview numbers only.\n"
+    "Use search_web only for public facts the warehouse cannot answer (one call per run).\n"
     "If only the operator can settle an ambiguity, reply with result needs_input and one question.\n"
     "Reply with JSON only when you are finished: "
     '{"result":"done|fail|needs_input","what_was_done":"...","text_report":"...",'
@@ -758,6 +762,15 @@ def node_researcher(state: PipelineState) -> PipelineState:
         messages = list(saved["messages"])
     else:
         system = store.assemble_agent_prompt("researcher") + _RESEARCHER_TASK + _report_contract(ctx) + "\n"
+        from .pipeline_run import web_search_allowed
+
+        if web_search_allowed(ctx):
+            system += (
+                "\nUse search_web for benchmarks, news, or rates outside the database "
+                "(at most once per run).\n"
+            )
+        else:
+            system += "\nWeb search is disabled for this run.\n"
         hint = str(ctx.pop("orchester_hint", "") or "").strip()
         if hint:
             system += f"Orchester hint for this retry: {hint}\n"
@@ -768,6 +781,9 @@ def node_researcher(state: PipelineState) -> PipelineState:
         ctx["rag"] = {key: value for key, value in rag.items() if key != "text"}
 
         user = _build_user_message(ctx) + f"\n\ngoals:\n{ctx.get('goals') or ''}"
+        brief = str(ctx.get("web_search_brief") or "").strip()
+        if brief and "web_search_brief:" not in user:
+            user += f"\n\nweb_search_brief:\n{brief}"
         fetch = ctx.get("sql_fetch") if isinstance(ctx.get("sql_fetch"), dict) else None
         if fetch:
             rows = fetch.get("rows") or []
@@ -781,7 +797,7 @@ def node_researcher(state: PipelineState) -> PipelineState:
             {"role": "user", "content": user},
         ]
 
-    tools = _researcher_tools()
+    tools = _researcher_tools(ctx)
     limit = max_tool_turns() + int(ctx.get("_researcher_extension_budget") or 0)
 
     def on_turn(detail: dict[str, Any]) -> None:

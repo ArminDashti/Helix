@@ -22,6 +22,8 @@ _SECRET_ARG_RE = re.compile(
     r"(?i)(key|token|secret|password|passwd|pwd)(=|\s+)\S+"
 )
 _SQL_ENGINES = {"sqlserver", "mssql"}
+SQL_MCP_NAME = "helix-sqlserver"
+SQL_MCP_PACKAGE = "mssql-mcp-server"
 
 
 def mcp_config_path() -> Path:
@@ -44,6 +46,15 @@ def mcp_config_path() -> Path:
         except OSError:
             pass
     return candidate
+
+
+def _load_or_create(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data: dict[str, Any] = {ENABLED_KEY: {}}
+        _write(path, data)
+        return data
+    return _read(path)
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -105,12 +116,48 @@ def _summarize(name: str, spec: Any, enabled: bool) -> dict[str, Any]:
     }
 
 
+def maybe_ensure_default_sql_server() -> None:
+    """Provision the built-in SQL Server MCP when Settings → Database is SQL Server."""
+    from .config_loader import get_database_engine
+
+    engine = str(get_database_engine() or "").lower()
+    if engine not in _SQL_ENGINES:
+        return
+    try:
+        ensure_sql_server()
+    except (ValueError, OSError):
+        pass
+
+
+def test_sql_server() -> dict[str, Any]:
+    """Probe the configured SQL Server (same credentials as the built-in MCP)."""
+    from .config_loader import get_database_engine
+    from .db_dialects import get_dialect
+
+    engine = str(get_database_engine() or "").lower()
+    if engine not in _SQL_ENGINES:
+        raise ValueError(
+            f"configured database engine is {engine!r}; "
+            "the SQL Server MCP requires engine 'sqlserver'"
+        )
+    dialect = get_dialect()
+    with dialect.connect() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT 1 AS ok")
+        row = cur.fetchone()
+    probe = int(row[0]) if row else None
+    if probe != 1:
+        raise ValueError("database probe returned an unexpected result")
+    return {"ok": True, "mcp": SQL_MCP_NAME, "package": SQL_MCP_PACKAGE}
+
+
 def list_servers() -> dict[str, Any]:
     """All MCP servers with secrets stripped (env/header values never leave the file)."""
+    maybe_ensure_default_sql_server()
     path = mcp_config_path()
     if not path.exists():
         return {
-            "config_path": DEFAULT_MCP_CONFIG,
+            "config_path": str(path),
             "exists": False,
             "servers": [],
         }
@@ -121,7 +168,7 @@ def list_servers() -> dict[str, Any]:
     servers += [_summarize(str(n), s, False) for n, s in disabled_map.items()]
     servers.sort(key=lambda s: (not s["is_sql_server"], s["name"].lower()))
     return {
-        "config_path": DEFAULT_MCP_CONFIG,
+        "config_path": str(path),
         "exists": True,
         "servers": servers,
     }
@@ -253,10 +300,10 @@ def ensure_sql_server() -> dict[str, Any]:
         f"{'true' if db.get('trust_server_certificate') else 'false'};"
     )
 
-    name = "helix-sqlserver"
+    name = SQL_MCP_NAME
     entry = {
         "command": "npx",
-        "args": ["-y", "mssql-mcp-server"],
+        "args": ["-y", SQL_MCP_PACKAGE],
         "env": {
             "MSSQL_CONNECTION_STRING": connection_string,
             # Let the agent actually query through the MCP; Helix rules keep it SELECT-only.
@@ -265,7 +312,7 @@ def ensure_sql_server() -> dict[str, Any]:
     }
 
     path = mcp_config_path()
-    data = _read(path)
+    data = _load_or_create(path)
     enabled_map = _server_map(data, ENABLED_KEY)
     disabled_map = _server_map(data, DISABLED_KEY)
     disabled_map.pop(name, None)

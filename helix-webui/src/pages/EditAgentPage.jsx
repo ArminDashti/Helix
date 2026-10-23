@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Bot, Save } from "lucide-react";
 import { fetchAgents, updateAgent } from "../api/client.js";
+import AgentIconPicker from "../components/AgentIconPicker.jsx";
 import IconButton from "../components/IconButton.jsx";
+import { DEFAULT_AGENT_ICON_ID } from "../lib/agentIcons.js";
 import PageHeader from "../components/PageHeader.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
 import { failMessage } from "../i18n/apiErrors.js";
@@ -17,6 +19,7 @@ export default function EditAgentPage() {
   const [agent, setAgent] = useState(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [icon, setIcon] = useState(DEFAULT_AGENT_ICON_ID);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -35,6 +38,7 @@ export default function EditAgentPage() {
         setAgent(found);
         setName(found.name || found.id);
         setDescription(found.description || "");
+        setIcon(found.icon || DEFAULT_AGENT_ICON_ID);
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -61,6 +65,7 @@ export default function EditAgentPage() {
       await updateAgent(agent.id, {
         name,
         description,
+        icon,
       });
       navigate("/agents");
     } catch (err) {
@@ -111,6 +116,11 @@ export default function EditAgentPage() {
             className={inputClass}
           />
         </label>
+        <AgentIconPicker
+          label={t("agents.icon")}
+          value={icon}
+          onChange={setIcon}
+        />
         <p className="text-sm text-muted">{t("agents.assignedOnlyHint")}</p>
         <div className="flex flex-wrap gap-2">
           <IconButton

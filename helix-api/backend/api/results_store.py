@@ -86,6 +86,41 @@ def _coerce_usage(value: Any) -> dict[str, Any] | None:
     }
 
 
+def _coerce_models(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if item is None or isinstance(item, bool):
+            continue
+        text = str(item).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out
+
+
+def _models_from_item(item: dict[str, Any]) -> list[str]:
+    direct = _coerce_models(item.get("models"))
+    if direct:
+        return direct
+    usage = item.get("token_usage")
+    if isinstance(usage, dict):
+        from_usage = _coerce_models(usage.get("models"))
+        if from_usage:
+            return from_usage
+    payload = item.get("payload")
+    if isinstance(payload, dict):
+        nested = payload.get("token_usage")
+        if isinstance(nested, dict):
+            from_payload = _coerce_models(nested.get("models"))
+            if from_payload:
+                return from_payload
+    return []
+
+
 def _coerce_rag(value: Any) -> dict[str, Any] | None:
     """Which knowledge documents a run retrieved, and what they cost in tokens."""
     if not isinstance(value, dict):
@@ -122,6 +157,13 @@ def _rag_from_item(item: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _coerce_creator_display_name(value: Any) -> str:
+    if value is None or isinstance(value, bool):
+        return ""
+    text = str(value).strip()
+    return text[:80] if text else ""
+
+
 def _summary(item: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": item.get("id"),
@@ -130,8 +172,12 @@ def _summary(item: dict[str, Any]) -> dict[str, Any]:
         "mode": item.get("mode") or "",
         "language": item.get("language") or "en",
         "archived": bool(item.get("archived")),
+        "creator_display_name": _coerce_creator_display_name(
+            item.get("creator_display_name")
+        ),
         "duration_s": _coerce_duration_s(item.get("duration_s")),
         "token_usage": _token_usage_from_item(item),
+        "models": _models_from_item(item),
         "rag": _rag_from_item(item),
     }
 
@@ -161,6 +207,7 @@ def create_result(
     duration_s: Any = None,
     token_usage: Any = None,
     rag: Any = None,
+    creator_display_name: str | None = None,
 ) -> dict[str, Any]:
     item = {
         "id": uuid.uuid4().hex,
@@ -169,6 +216,7 @@ def create_result(
         "mode": mode,
         "language": language or "en",
         "archived": False,
+        "creator_display_name": _coerce_creator_display_name(creator_display_name),
         "payload": payload,
         "duration_s": _coerce_duration_s(duration_s),
         "token_usage": _coerce_usage(token_usage),

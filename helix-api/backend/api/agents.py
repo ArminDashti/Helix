@@ -8,7 +8,7 @@ AGENT_PIPELINE = [
     },
     {
         "id": "researcher",
-        "name": "researcher",
+        "name": "Researcher",
         "description": "Fetch database rows with read-only SQL and write the result against the goals; may ask the operator",
     },
 ]
@@ -106,3 +106,4 @@ def is_pipeline_agent(agent_id: str) -> bool:
     """True for graph-eligible agents (orchester, researcher)."""
     rid = resolve_agent_definition_id(agent_id)
     return rid in AGENT_BY_ID
+

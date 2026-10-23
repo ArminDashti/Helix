@@ -10,7 +10,6 @@ import {
   PanelLeftClose,
   Play,
   Plug,
-  CircleHelp,
   Activity,
   Settings,
   Shield,
@@ -154,7 +153,6 @@ export default function Layout() {
 
   const footerLinks = [
     ...(isAdmin ? [{ to: "/admin", label: t("nav.admin"), icon: Shield }] : []),
-    { to: "/help", label: t("nav.help"), icon: CircleHelp },
     { to: "/settings", label: t("nav.settings"), icon: Settings },
   ];
 

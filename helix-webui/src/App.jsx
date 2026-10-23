@@ -5,7 +5,6 @@ import { ApiStatusProvider } from "./context/ApiStatusContext.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { LiveSyncProvider } from "./context/LiveSyncContext.jsx";
 import { I18nProvider } from "./context/I18nContext.jsx";
-import HelpPage from "./pages/HelpPage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
 import AgentAssignmentsPage from "./pages/AgentAssignmentsPage.jsx";
 import AgentsPage from "./pages/AgentsPage.jsx";
@@ -16,12 +15,13 @@ import EditSkillPage from "./pages/EditSkillPage.jsx";
 import NewAgentPage from "./pages/NewAgentPage.jsx";
 import NewSkillPage from "./pages/NewSkillPage.jsx";
 import CanvasPage from "./pages/CanvasPage.jsx";
+import TemplatesPage from "./pages/TemplatesPage.jsx";
 import ResultsPage from "./pages/ResultsPage.jsx";
 import LogsPage from "./pages/LogsPage.jsx";
-import McpPage from "./pages/McpPage.jsx";
 import KnowledgePage from "./pages/KnowledgePage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
+import HelpPage from "./pages/HelpPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import SkillsPage from "./pages/SkillsPage.jsx";
 
@@ -47,6 +47,7 @@ export default function App() {
             <Route path="results" element={<ResultsPage />} />
             <Route path="results/:resultId" element={<ResultsPage />} />
             <Route path="canvas" element={<CanvasPage />} />
+            <Route path="templates" element={<TemplatesPage />} />
             <Route path="report-design" element={<Navigate to="/canvas" replace />} />
             <Route path="logs" element={<LogsPage />} />
             <Route path="logs/:logId" element={<LogsPage />} />
@@ -61,7 +62,7 @@ export default function App() {
             <Route path="knowledge" element={<KnowledgePage />} />
             <Route path="docs" element={<Navigate to="/knowledge?tab=tables" replace />} />
             <Route path="rag" element={<Navigate to="/knowledge?tab=rag" replace />} />
-            <Route path="mcp" element={<McpPage />} />
+            <Route path="mcp" element={<Navigate to="/settings?tab=mcp" replace />} />
             <Route path="db-explorer" element={<DbExplorerPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
@@ -85,4 +86,11 @@ export default function App() {
     </BrowserRouter>
   );
 }
+
+
+
+
+
+
+
 

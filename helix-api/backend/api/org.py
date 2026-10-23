@@ -27,10 +27,75 @@ def user_wire(user: dict[str, Any]) -> dict[str, Any]:
         "id": user["id"],
         "username": user["username"],
         "display_name": user["display_name"],
+        "email": str(user.get("email") or ""),
         "is_admin": bool(user.get("is_admin")),
         "data_access_plain": str(user.get("data_access_plain") or ""),
         "allowed_tables": list(user.get("allowed_tables") or []),
     }
+
+
+def _coerce_stored_token_usage(raw: Any) -> dict[str, int]:
+    if not isinstance(raw, dict):
+        return {"prompt_tokens": 0, "completion_tokens": 0}
+    try:
+        prompt = max(0, int(float(str(raw.get("prompt_tokens") or 0))))
+        completion = max(0, int(float(str(raw.get("completion_tokens") or 0))))
+    except (TypeError, ValueError):
+        return {"prompt_tokens": 0, "completion_tokens": 0}
+    return {"prompt_tokens": prompt, "completion_tokens": completion}
+
+
+def _validate_email(value: str) -> str:
+    cleaned = (value or "").strip()
+    if not cleaned:
+        return ""
+    if len(cleaned) > 120:
+        raise ValueError("email must be at most 120 characters")
+    if "@" not in cleaned or cleaned.startswith("@") or cleaned.endswith("@"):
+        raise ValueError("email must be a valid address")
+    return cleaned
+
+
+def add_token_usage(user_id: str, usage: dict[str, Any] | None) -> None:
+    if not usage or not user_id:
+        return
+    try:
+        prompt = max(0, int(float(str(usage.get("prompt_tokens") or 0))))
+        completion = max(0, int(float(str(usage.get("completion_tokens") or 0))))
+    except (TypeError, ValueError):
+        return
+    if not (prompt or completion):
+        return
+    data = ensure_org()
+    users = data.get("users") or []
+    for user in users:
+        if not isinstance(user, dict) or user.get("id") != user_id:
+            continue
+        bucket = _coerce_stored_token_usage(user.get("token_usage"))
+        bucket["prompt_tokens"] += prompt
+        bucket["completion_tokens"] += completion
+        user["token_usage"] = bucket
+        data["users"] = users
+        save_config(data)
+        return
+
+
+def list_usage_wire() -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for user in list_users():
+        totals = _coerce_stored_token_usage(user.get("token_usage"))
+        rows.append(
+            {
+                "user_id": user["id"],
+                "username": user["username"],
+                "display_name": user["display_name"],
+                "email": str(user.get("email") or ""),
+                "input_tokens": totals["prompt_tokens"],
+                "output_tokens": totals["completion_tokens"],
+            }
+        )
+    rows.sort(key=lambda row: str(row.get("username") or ""))
+    return rows
 
 
 def ensure_org() -> dict[str, Any]:
@@ -96,14 +161,19 @@ def _normalize_users(raw: list[Any]) -> list[dict[str, Any]]:
                 name = str(item or "").strip()
                 if name and name not in tables:
                     tables.append(name)
+        email = str(entry.get("email") or "").strip()[:120]
         item: dict[str, Any] = {
             "id": user_id,
             "username": username,
             "display_name": display[:80],
+            "email": email,
             "is_admin": bool(entry.get("is_admin")),
             "data_access_plain": plain[:2000],
             "allowed_tables": tables,
         }
+        usage = _coerce_stored_token_usage(entry.get("token_usage"))
+        if usage["prompt_tokens"] or usage["completion_tokens"]:
+            item["token_usage"] = usage
         password_hash = str(entry.get("password_hash") or "").strip()
         if password_hash:
             item["password_hash"] = password_hash
@@ -184,6 +254,7 @@ def create_user(
     is_admin: bool = False,
     data_access_plain: str = "",
     allowed_tables: list[str] | None = None,
+    email: str = "",
 ) -> dict[str, Any]:
     cleaned_username = (username or "").strip().lower()
     if not USERNAME_RE.match(cleaned_username):
@@ -194,6 +265,7 @@ def create_user(
     if len(cleaned_display) > 80:
         raise ValueError("display_name must be at most 80 characters")
     cleaned_password = _validate_password(password)
+    cleaned_email = _validate_email(email)
     data = ensure_org()
     users = _normalize_users(data.get("users") or [])
     if any(u["username"] == cleaned_username for u in users):
@@ -202,6 +274,7 @@ def create_user(
         "id": cleaned_username,
         "username": cleaned_username,
         "display_name": cleaned_display,
+        "email": cleaned_email,
         "is_admin": bool(is_admin),
         "data_access_plain": str(data_access_plain or "").strip()[:2000],
         "allowed_tables": [
@@ -248,6 +321,9 @@ def update_user(user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         if len(cleaned_display) > 80:
             raise ValueError("display_name must be at most 80 characters")
         current["display_name"] = cleaned_display
+
+    if "email" in payload and payload["email"] is not None:
+        current["email"] = _validate_email(str(payload["email"] or ""))
 
     if "is_admin" in payload and payload["is_admin"] is not None:
         next_admin = bool(payload["is_admin"])

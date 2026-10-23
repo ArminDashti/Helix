@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bot, Plus } from "lucide-react";
 import { createAgent } from "../api/client.js";
+import AgentIconPicker from "../components/AgentIconPicker.jsx";
 import IconButton from "../components/IconButton.jsx";
+import { DEFAULT_AGENT_ICON_ID } from "../lib/agentIcons.js";
 import PageHeader from "../components/PageHeader.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
 import { failMessage } from "../i18n/apiErrors.js";
@@ -26,6 +28,7 @@ export default function NewAgentPage() {
   const [newDescription, setNewDescription] = useState(
     PIPELINE_DESIGNER_HINT.description,
   );
+  const [icon, setIcon] = useState(DEFAULT_AGENT_ICON_ID);
 
   function fillPipelineDesigner() {
     setNewId(PIPELINE_DESIGNER_HINT.id);
@@ -42,6 +45,7 @@ export default function NewAgentPage() {
         id: newId.trim(),
         name: newName.trim(),
         description: newDescription.trim(),
+        icon,
       });
       navigate("/agents");
     } catch (err) {
@@ -107,6 +111,11 @@ export default function NewAgentPage() {
             className={inputClass}
           />
         </label>
+        <AgentIconPicker
+          label={t("agents.icon")}
+          value={icon}
+          onChange={setIcon}
+        />
         <p className="text-sm text-muted">{t("agents.assignedOnlyHint")}</p>
         <div className="flex flex-wrap gap-2">
           <IconButton

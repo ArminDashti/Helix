@@ -455,7 +455,7 @@ def _explicit_warehouse_engine(db: dict[str, Any]) -> str | None:
     if not raw:
         return None
     engine = ENGINE_ALIASES.get(raw)
-    if engine in ("sqlserver", "postgresql"):
+    if engine in ("sqlserver", "postgresql", "mysql"):
         return engine
     return None
 
@@ -529,7 +529,7 @@ def update_database_settings(payload: dict[str, Any]) -> dict[str, Any]:
     conn = payload.get("connection_string")
     engine_hint = _explicit_warehouse_engine(payload)
     use_connection_string = conn is not None and str(conn).strip() != ""
-    if use_connection_string and engine_hint in ("sqlserver", "postgresql"):
+    if use_connection_string and engine_hint in ("sqlserver", "postgresql", "mysql"):
         if str(conn).strip().lower().startswith("file:"):
             use_connection_string = False
     if use_connection_string:
@@ -1138,15 +1138,56 @@ def get_custom_agents() -> list[dict[str, str]]:
     return agents
 
 
+AGENT_ICON_IDS = frozenset(
+    {
+        "bot",
+        "brain",
+        "search",
+        "database",
+        "bar-chart",
+        "shield",
+        "sparkles",
+        "microscope",
+        "book-open",
+        "wrench",
+        "network",
+        "globe",
+        "message-square",
+        "zap",
+        "target",
+        "git-branch",
+        "layers",
+        "cpu",
+        "eye",
+        "flask-conical",
+    }
+)
+DEFAULT_AGENT_ICON = "bot"
+
+
+def normalize_agent_icon(icon: str | None) -> str:
+    cleaned = str(icon or "").strip().lower()
+    if cleaned in AGENT_ICON_IDS:
+        return cleaned
+    allowed = ", ".join(sorted(AGENT_ICON_IDS))
+    raise ValueError(f"icon must be one of: {allowed}")
+
+
 def _apply_agent_profile(meta: dict[str, Any], profiles: dict[str, Any]) -> dict[str, Any]:
     item = dict(meta)
     profile = profiles.get(meta["id"])
-    if not isinstance(profile, dict):
-        return item
-    if profile.get("name"):
-        item["name"] = str(profile["name"]).strip()
-    if "description" in profile:
-        item["description"] = str(profile.get("description") or "").strip()
+    if isinstance(profile, dict):
+        if profile.get("name"):
+            item["name"] = str(profile["name"]).strip()
+        if "description" in profile:
+            item["description"] = str(profile.get("description") or "").strip()
+        if profile.get("icon"):
+            try:
+                item["icon"] = normalize_agent_icon(str(profile.get("icon")))
+            except ValueError:
+                item["icon"] = DEFAULT_AGENT_ICON
+    if "icon" not in item:
+        item["icon"] = DEFAULT_AGENT_ICON
     return item
 
 
@@ -1209,6 +1250,22 @@ def get_disabled_agent_ids() -> set[str]:
         return set()
     return {str(item).strip() for item in raw if str(item).strip()}
 
+
+
+def web_search_enabled() -> bool:
+    """Site-wide web search toggle (default on). Honors features.web_search in config."""
+    data = load_config()
+    features = data.get("features")
+    if isinstance(features, dict) and "web_search" in features:
+        raw = features.get("web_search")
+        if isinstance(raw, bool):
+            return raw
+        if isinstance(raw, str):
+            return raw.strip().lower() in ("1", "true", "yes")
+        return bool(raw)
+    if "web-searcher" in get_disabled_agent_ids():
+        return False
+    return True
 
 def set_agent_disabled(agent_id: str, disabled: bool) -> dict[str, Any]:
     if agent_id not in known_agent_ids():
@@ -1282,6 +1339,7 @@ def create_custom_agent(
     agent_id: str,
     name: str,
     description: str = "",
+    icon: str | None = None,
 ) -> dict[str, Any]:
     cleaned_id = (agent_id or "").strip()
     if not AGENT_ID_RE.match(cleaned_id):
@@ -1299,6 +1357,7 @@ def create_custom_agent(
                 cleaned_id,
                 name=name,
                 description=description,
+                icon=icon,
             )
     if cleaned_id in known_agent_ids():
         raise ValueError(f"Agent already exists: {cleaned_id}")
@@ -1323,6 +1382,12 @@ def create_custom_agent(
         }
     )
     data["custom_agents"] = custom
+    cleaned_icon = normalize_agent_icon(icon) if icon else DEFAULT_AGENT_ICON
+    profiles = data.get("agent_profiles") if isinstance(data.get("agent_profiles"), dict) else {}
+    profile = dict(profiles.get(cleaned_id) or {}) if isinstance(profiles.get(cleaned_id), dict) else {}
+    profile["icon"] = cleaned_icon
+    profiles[cleaned_id] = profile
+    data["agent_profiles"] = profiles
     save_config(data)
 
     # Lazy import avoids circular import at module load
@@ -1332,12 +1397,7 @@ def create_custom_agent(
     skills_path = store.skills_dir() / cleaned_id
     skills_path.mkdir(parents=True, exist_ok=True)
 
-    return {
-        "id": cleaned_id,
-        "name": cleaned_name,
-        "description": cleaned_description,
-        "builtin": False,
-    }
+    return get_agent_meta(cleaned_id)
 
 
 def delete_custom_agent(agent_id: str) -> None:
@@ -1454,6 +1514,7 @@ def update_agent_fields(
     *,
     name: str | None = None,
     description: str | None = None,
+    icon: str | None = None,
 ) -> dict[str, Any]:
     if agent_id not in known_agent_ids():
         raise KeyError(f"Unknown agent: {agent_id}")
@@ -1472,6 +1533,9 @@ def update_agent_fields(
         if len(cleaned_description) > 500:
             raise ValueError("description must be at most 500 characters")
         profile["description"] = cleaned_description
+
+    if icon is not None:
+        profile["icon"] = normalize_agent_icon(icon)
 
     if not is_builtin_agent(agent_id):
         custom = data.get("custom_agents")

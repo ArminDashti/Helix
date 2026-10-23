@@ -74,6 +74,14 @@ def complete_chat(
     return text
 
 
+def resolve_chat_model(
+    agent_id: str, *, intelligence_level: str | None = None
+) -> str:
+    """Model id that would be sent for one agent chat turn (after auto/default rules)."""
+    provider, _, _ = require_llm()
+    return _resolve_model(agent_id, provider, intelligence_level=intelligence_level)
+
+
 def complete_chat_messages(
     agent_id: str,
     messages: list[dict[str, Any]],

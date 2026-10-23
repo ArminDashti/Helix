@@ -25,12 +25,12 @@ Optional: copy `.env.example` to `.env` and set `VITE_API_BASE_URL` for an absol
 | `/results` | Analysis result history (show, export, delete) |
 | `/logs` | Failure and error history (show, delete) |
 | `/skills` | Skills list and editor |
-| `/agents` | Agent list, Arrange stages (one IF per stage), Graph |
+| `/agents` | Agent list |
 | `/docs` | Table column docs (sql-description and description) |
 | `/results` | Analysis result history (show, export, delete) |
 | `/settings` | SQL Server + single LLM connector (OpenCode-Go, OpenRouter or OpenAI-compatible), base URL, API key, and models |
 | `/admin` | Company users & access policies |
-| `/about-me` | About page |
+| `/about-me` | Redirects to Settings → About Me |
 
 ## Admin guide PDF (Persian)
 
@@ -42,4 +42,8 @@ npx playwright install chromium   # once per machine
 npm run build:admin-guide-pdf
 ```
 
-Download from **Settings → General** or **Admin** in the Web UI.
+Download from **Help → Admin guide** in the Web UI.
+
+
+
+

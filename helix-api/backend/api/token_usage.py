@@ -92,6 +92,20 @@ def _from_provider(usage: Any) -> dict[str, int] | None:
     }
 
 
+def _note_model(bucket: dict[str, Any], model: Any) -> None:
+    if model is None or isinstance(model, bool):
+        return
+    name = str(model).strip()
+    if not name:
+        return
+    models = bucket.get("models")
+    if not isinstance(models, list):
+        models = []
+        bucket["models"] = models
+    if name not in models:
+        models.append(name)
+
+
 def _add(bucket: dict[str, Any], reported: dict[str, int], *, estimated: bool) -> None:
     bucket["prompt_tokens"] = _int(bucket.get("prompt_tokens")) + reported["prompt_tokens"]
     bucket["completion_tokens"] = (
@@ -110,6 +124,7 @@ def record_call(
     messages: list[dict[str, Any]] | None = None,
     reply: Any = "",
     usage: Any = None,
+    model: Any = None,
 ) -> dict[str, Any]:
     """Fold one LLM call into the run's running total (``ctx['token_usage']``).
 
@@ -139,6 +154,19 @@ def record_call(
         }
     _add(bucket, reported, estimated=estimated)
     _add(agent_bucket, reported, estimated=estimated)
+    resolved_model = model
+    if not resolved_model:
+        try:
+            from .demo import _normalize_report_type
+            from .llm_client import resolve_chat_model
+
+            level = _normalize_report_type(ctx.get("report_type"))
+            resolved_model = resolve_chat_model(
+                agent_id, intelligence_level=level
+            )
+        except Exception:  # noqa: BLE001 — model label is best-effort metadata
+            resolved_model = None
+    _note_model(bucket, resolved_model)
     return bucket
 
 
@@ -167,4 +195,9 @@ def snapshot(ctx: dict[str, Any] | None) -> dict[str, Any]:
             for agent, values in by_agent.items()
             if isinstance(values, dict)
         }
+    raw_models = bucket.get("models")
+    if isinstance(raw_models, list):
+        models = [str(item).strip() for item in raw_models if str(item).strip()]
+        if models:
+            out["models"] = models
     return out

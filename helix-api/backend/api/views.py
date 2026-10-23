@@ -206,11 +206,13 @@ def agents_list(request: HttpRequest) -> JsonResponse:
         agent_id = body.get("id") or ""
         name = body.get("role") or body.get("name") or ""
         description = body.get("description") or ""
+        icon = body.get("icon")
         try:
             created = create_custom_agent(
                 str(agent_id),
                 str(name),
                 str(description) if description is not None else "",
+                icon=str(icon) if icon is not None else None,
             )
         except ValueError as exc:
             return _error(str(exc), 400)
@@ -605,6 +607,7 @@ def agent_rename(request: HttpRequest, agent_id: str) -> JsonResponse:
     name = body.get("role") if "role" in body else body.get("name")
     disabled = body.get("disabled")
     description = body.get("description")
+    icon = body.get("icon")
     if name is not None:
         if not isinstance(name, str):
             return _error("name must be a string")
@@ -627,6 +630,13 @@ def agent_rename(request: HttpRequest, agent_id: str) -> JsonResponse:
             )
         except ValueError as exc:
             return _error(str(exc))
+        except KeyError:
+            return _error(f"Unknown agent: {agent_id}", 404)
+    if icon is not None:
+        try:
+            update_agent_fields(agent_id, icon=str(icon))
+        except ValueError as exc:
+            return _error(str(exc), 400)
         except KeyError:
             return _error(f"Unknown agent: {agent_id}", 404)
     try:
@@ -828,6 +838,18 @@ def mcp_sqlserver(request: HttpRequest) -> JsonResponse:
 
 
 @csrf_exempt
+@require_http_methods(["POST"])
+def mcp_sqlserver_test(request: HttpRequest) -> JsonResponse:
+    """Probe SQL Server connectivity for the built-in MCP."""
+    try:
+        return JsonResponse(mcp_config.test_sql_server())
+    except ValueError as exc:
+        return _error(str(exc))
+    except OSError as exc:
+        return _error(str(exc), 500)
+
+
+@csrf_exempt
 @require_http_methods(["GET", "POST"])
 def results_collection(request: HttpRequest) -> JsonResponse:
     if request.method == "GET":
@@ -844,15 +866,23 @@ def results_collection(request: HttpRequest) -> JsonResponse:
     if not isinstance(mode, str) or not isinstance(language, str):
         return _error("mode and language must be strings")
     payload = body.get("payload")
+    token_usage_body = body.get("token_usage")
+    if not token_usage_body and isinstance(payload, dict):
+        token_usage_body = payload.get("token_usage")
+    actor = _user_from_request(request)
     item = results_store.create_result(
         prompt=prompt.strip(),
         mode=mode,
         language=language,
         payload=payload,
         duration_s=body.get("duration_s"),
-        token_usage=body.get("token_usage"),
+        token_usage=token_usage_body,
         rag=body.get("rag"),
+        creator_display_name=str(actor.get("display_name") or "") if actor else None,
     )
+    usage = results_store._token_usage_from_item(item)
+    if actor and usage:
+        org.add_token_usage(actor["id"], usage)
     return JsonResponse(item, status=201)
 
 
@@ -1559,6 +1589,7 @@ def admin_users(request: HttpRequest) -> JsonResponse:
             is_admin=is_admin,
             data_access_plain=str(access.get("data_access_plain") or ""),
             allowed_tables=list(access.get("allowed_tables") or []),
+            email=str(body.get("email") or ""),
         )
     except ValueError as exc:
         return _error(str(exc))
@@ -1610,6 +1641,17 @@ def admin_user_detail(request: HttpRequest, user_id: str) -> JsonResponse:
     return JsonResponse(item)
 
 
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def admin_usage(request: HttpRequest) -> JsonResponse:
+    denied = _require_admin(request)
+    if isinstance(denied, JsonResponse):
+        return denied
+    return JsonResponse({"usage": org.list_usage_wire()})
+
+
 @csrf_exempt
 @require_http_methods(["GET"])
 def state_version(request: HttpRequest) -> JsonResponse:
@@ -1620,6 +1662,15 @@ def state_version(request: HttpRequest) -> JsonResponse:
     resp = JsonResponse(data)
     resp["Cache-Control"] = "no-store"
     return resp
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def server_info(request: HttpRequest) -> JsonResponse:
+    """Read-only host facts for Settings → Server."""
+    from .server_info import collect_server_info
+
+    return JsonResponse(collect_server_info(get_database_engine()))
 
 
 @csrf_exempt

@@ -1,9 +1,11 @@
 from django.urls import path
 
+from . import report_template_views
 from . import views
 
 urlpatterns = [
     path("health/", views.health, name="health"),
+    path("server-info/", views.server_info, name="server-info"),
     path("auth/login/", views.auth_login, name="auth-login"),
     path("auth/me/", views.auth_me, name="auth-me"),
     path("agents/", views.agents_list, name="agents-list"),
@@ -18,6 +20,16 @@ urlpatterns = [
     path("skills/assignments/", views.skills_assignments, name="skills-assignments"),
     path("skills/<str:scope>/<str:skill_id>/rename/", views.skill_rename, name="skill-rename"),
     path("skills/<str:scope>/<str:skill_id>/", views.skill_detail, name="skill-detail"),
+    path(
+        "report-templates/",
+        report_template_views.report_templates_collection,
+        name="report-templates",
+    ),
+    path(
+        "report-templates/<str:template_id>/",
+        report_template_views.report_template_detail,
+        name="report-template-detail",
+    ),
     path("docs/tables/", views.docs_tables, name="docs-tables"),
     path("docs/tables/<str:table>/", views.docs_table_detail, name="docs-table-detail"),
     path("results/", views.results_collection, name="results-collection"),
@@ -32,6 +44,7 @@ urlpatterns = [
     path("mcp/import/", views.mcp_import, name="mcp-import"),
     path("mcp/delete/", views.mcp_delete, name="mcp-delete"),
     path("mcp/sqlserver/", views.mcp_sqlserver, name="mcp-sqlserver"),
+    path("mcp/sqlserver/test/", views.mcp_sqlserver_test, name="mcp-sqlserver-test"),
     path("admin/database/", views.admin_database, name="admin-database"),
     path(
         "admin/database/import/",
@@ -55,6 +68,7 @@ urlpatterns = [
     path("admin/pipeline-graph/", views.admin_pipeline_graph, name="admin-pipeline-graph"),
     path("admin/users/", views.admin_users, name="admin-users"),
     path("admin/users/<str:user_id>/", views.admin_user_detail, name="admin-user-detail"),
+    path("admin/usage/", views.admin_usage, name="admin-usage"),
     path("sample-tiers/", views.sample_tiers, name="sample-tiers"),
     path(
         "sample-tiers/<str:tier_id>/ensure/",
@@ -69,3 +83,4 @@ urlpatterns = [
     path("app/feedback/", views.app_feedback, name="app-feedback"),
     path("events/stream", views.events_stream, name="events-stream"),
 ]
+

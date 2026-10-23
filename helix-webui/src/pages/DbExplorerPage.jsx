@@ -7,6 +7,7 @@ import {
 } from "../api/client.js";
 import IconButton from "../components/IconButton.jsx";
 import PageHeader from "../components/PageHeader.jsx";
+import SearchableCombobox from "../components/SearchableCombobox.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
 import { failMessage } from "../i18n/apiErrors.js";
 import { compareAz, sortStrings } from "../utils/sortOptions.js";
@@ -17,8 +18,6 @@ const LIMITS = [16, 32, 64, 128];
 const OBJECT_KINDS = [
   { value: "tables", labelKey: "dbExplorer.kindTables" },
   { value: "views", labelKey: "dbExplorer.kindViews" },
-  { value: "procedures", labelKey: "dbExplorer.kindProcedures" },
-  { value: "functions", labelKey: "dbExplorer.kindFunctions" },
 ];
 
 export default function DbExplorerPage() {
@@ -36,13 +35,19 @@ export default function DbExplorerPage() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState(null);
-  const [tableFilter, setTableFilter] = useState("");
-
   const kindLabel = t(
     OBJECT_KINDS.find((k) => k.value === objectKind)?.labelKey ||
       "dbExplorer.kindTables",
   );
-  const canQuery = objectKind === "tables" || objectKind === "views";
+
+  const tableOptions = useMemo(
+    () =>
+      tables.map((tbl) => ({
+        value: tbl.full_name,
+        label: tbl.full_name,
+      })),
+    [tables],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -100,16 +105,6 @@ export default function DbExplorerPage() {
     [columns, locale],
   );
 
-  const filteredTables = useMemo(() => {
-    const q = tableFilter.trim().toLowerCase();
-    if (!q) return tables;
-    return tables.filter((tbl) =>
-      String(tbl.full_name || "")
-        .toLowerCase()
-        .includes(q),
-    );
-  }, [tables, tableFilter]);
-
   async function handleRun(event) {
     event.preventDefault();
     setRunning(true);
@@ -154,13 +149,13 @@ export default function DbExplorerPage() {
         onSubmit={handleRun}
         className="filter-section shrink-0 space-y-3 rounded-2xl border border-line/80 bg-paper/80 p-4"
       >
-        <div className="flex flex-wrap items-end gap-3 overflow-x-auto">
-          <label className="block min-w-[8rem] shrink-0 text-sm">
-            <span className="font-medium text-ink">{t("dbExplorer.objectType")}</span>
+        <div className="flex flex-wrap items-center gap-3 overflow-x-auto">
+          <div className="block min-w-[8rem] shrink-0 text-sm">
             <select
               value={objectKind}
               onChange={(e) => setObjectKind(e.target.value)}
-              className="mt-1 h-10 w-full min-w-[9rem] rounded-xl border border-line bg-fog/40 px-3 text-sm outline-none focus:border-moss"
+              aria-label={t("dbExplorer.objectType")}
+              className="h-10 w-full min-w-[9rem] rounded-xl border border-line bg-fog/40 px-3 text-sm outline-none focus:border-moss"
             >
               {OBJECT_KINDS.map((k) => (
                 <option key={k.value} value={k.value}>
@@ -168,55 +163,23 @@ export default function DbExplorerPage() {
                 </option>
               ))}
             </select>
-          </label>
-
-          <label className="block min-w-[8rem] shrink-0 text-sm">
-            <span className="font-medium text-ink">{t("dbExplorer.filter")}</span>
-            <input
-              type="search"
-              value={tableFilter}
-              onChange={(e) => setTableFilter(e.target.value)}
-              placeholder={t("dbExplorer.filterPlaceholder")}
-              className="mt-1 h-10 w-full min-w-[8rem] rounded-xl border border-line bg-fog/40 px-3 text-sm outline-none focus:border-moss"
-            />
-          </label>
-
-          <div className="block min-w-[10rem] shrink-0 text-sm">
-            <span className="font-medium text-ink">{kindLabel}</span>
-            <select
-              value={table}
-              onChange={(e) => setTable(e.target.value)}
-              className="mt-1 h-10 w-full min-w-[10rem] rounded-xl border border-line bg-fog/40 px-3 text-sm outline-none focus:border-moss"
-            >
-              {tables.length === 0 ? (
-                <option value="">{t("dbExplorer.noObjects")}</option>
-              ) : filteredTables.length === 0 ? (
-                <option value={table || ""}>
-                  {table
-                    ? t("dbExplorer.notInFilter", { table })
-                    : t("dbExplorer.noMatching")}
-                </option>
-              ) : (
-                <>
-                  {table &&
-                  !filteredTables.some((tbl) => tbl.full_name === table) ? (
-                    <option value={table}>
-                      {t("dbExplorer.notInFilter", { table })}
-                    </option>
-                  ) : null}
-                  {filteredTables.map((tbl) => (
-                    <option key={tbl.full_name} value={tbl.full_name}>
-                      {tbl.full_name}
-                    </option>
-                  ))}
-                </>
-              )}
-            </select>
           </div>
 
-          <fieldset className="shrink-0 text-sm">
-            <legend className="font-medium text-ink">{t("dbExplorer.rows")}</legend>
-            <div className="mt-1 flex flex-wrap gap-2">
+          <div className="block min-w-[12rem] shrink-0 text-sm">
+            <SearchableCombobox
+              value={table}
+              onChange={setTable}
+              options={tableOptions}
+              placeholder={t("dbExplorer.filterPlaceholder")}
+              ariaLabel={kindLabel}
+            />
+          </div>
+
+          <fieldset
+            className="shrink-0 text-sm"
+            aria-label={t("dbExplorer.rows")}
+          >
+            <div className="flex flex-wrap gap-2">
               {LIMITS.map((n) => (
                 <IconButton
                   key={n}
@@ -236,9 +199,11 @@ export default function DbExplorerPage() {
             </div>
           </fieldset>
 
-          <fieldset className="shrink-0 text-sm">
-            <legend className="font-medium text-ink">{t("dbExplorer.position")}</legend>
-            <div className="mt-1 flex gap-2">
+          <fieldset
+            className="shrink-0 text-sm"
+            aria-label={t("dbExplorer.position")}
+          >
+            <div className="flex gap-2">
               {["top", "tail"].map((pos) => (
                 <IconButton
                   key={pos}
@@ -258,12 +223,12 @@ export default function DbExplorerPage() {
             </div>
           </fieldset>
 
-          <label className="block min-w-[8rem] shrink-0 text-sm">
-            <span className="font-medium text-ink">{t("dbExplorer.orderBy")}</span>
+          <div className="block min-w-[8rem] shrink-0 text-sm">
             <select
               value={orderBy}
               onChange={(e) => setOrderBy(e.target.value)}
-              className="mt-1 h-10 w-full rounded-xl border border-line bg-fog/40 px-3 text-sm outline-none focus:border-moss"
+              aria-label={t("dbExplorer.orderBy")}
+              className="h-10 w-full rounded-xl border border-line bg-fog/40 px-3 text-sm outline-none focus:border-moss"
             >
               {columnNames.length === 0 ? (
                 <option value="">{t("common.noneDash")}</option>
@@ -275,34 +240,34 @@ export default function DbExplorerPage() {
                 ))
               )}
             </select>
-          </label>
+          </div>
 
-          <label className="block min-w-[6rem] shrink-0 text-sm">
-            <span className="font-medium text-ink">{t("dbExplorer.sort")}</span>
+          <div className="block min-w-[6rem] shrink-0 text-sm">
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value)}
-              className="mt-1 h-10 w-full rounded-xl border border-line bg-fog/40 px-3 text-sm outline-none focus:border-moss"
+              aria-label={t("dbExplorer.sort")}
+              className="h-10 w-full rounded-xl border border-line bg-fog/40 px-3 text-sm outline-none focus:border-moss"
             >
               <option value="ASC">{t("dbExplorer.sortAsc")}</option>
               <option value="DESC">{t("dbExplorer.sortDesc")}</option>
             </select>
-          </label>
+          </div>
 
-          <label className="block min-w-[16rem] grow text-sm">
-            <span className="font-medium text-ink">{t("dbExplorer.where")}</span>
+          <div className="block min-w-[16rem] grow text-sm">
             <input
               value={where}
               onChange={(e) => setWhere(e.target.value)}
               placeholder={t("dbExplorer.wherePlaceholder")}
-              className="mt-1 h-10 w-full rounded-xl border border-line bg-fog/40 px-3 font-mono text-[13px] outline-none focus:border-moss"
+              aria-label={t("dbExplorer.where")}
+              className="h-10 w-full rounded-xl border border-line bg-fog/40 px-3 font-mono text-[13px] outline-none focus:border-moss"
             />
-          </label>
+          </div>
 
           <IconButton
             type="submit"
             icon={Play}
-            disabled={!table || running || !canQuery}
+            disabled={!table || running}
             className="h-10 shrink-0 rounded-xl bg-moss px-5 text-sm font-semibold text-white hover:bg-moss-deep disabled:opacity-50"
           >
             {running ? t("dbExplorer.running") : t("dbExplorer.run")}
@@ -362,3 +327,12 @@ export default function DbExplorerPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+

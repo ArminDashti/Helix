@@ -93,7 +93,7 @@ const PATH_RESOURCE = [
   [/\/api\/admin\/provider\//, "config"],
   [/\/api\/admin\/openrouter\//, "config"],
   [/\/api\/admin\/branding\//, "branding"],
-  [/\/api\/admin\/pipeline-graph\//, "pipeline_graph"],
+  [/\/api\/report-templates\//, "report-templates"],
   [/\/api\/admin\/users\//, "users"],
   [/\/api\/sample-tiers\//, "database"],
 ];
@@ -130,15 +130,11 @@ export function notifyMutation(path, method) {
   // Special: config changes affect multiple views
   for (const r of resources) {
     emitLiveChange(r, "mutation");
-    // config/pipeline_graph also bumps agents/docs
     if (r === "config") {
-      emitLiveChange("pipeline_graph", "mutation:config");
       emitLiveChange("database", "mutation:config");
-    }
-    if (r === "pipeline_graph") {
-      emitLiveChange("config", "mutation:pipeline");
     }
   }
   // Always bump global
   emitLiveChange(ALL, "mutation");
 }
+

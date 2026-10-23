@@ -8,9 +8,14 @@ const inputClass =
 
 /**
  * Chip-based column picker for grid output.
- * @param {{ columns: string[], onChange: (cols: string[]) => void, id?: string }} props
+ * @param {{ columns: string[], onChange: (cols: string[]) => void, id?: string, disabled?: boolean }} props
  */
-export default function GridColumnInput({ columns, onChange, id = "grid_columns" }) {
+export default function GridColumnInput({
+  columns,
+  onChange,
+  id = "grid_columns",
+  disabled = false,
+}) {
   const { t } = useI18n();
   const [draft, setDraft] = useState("");
   const inputRef = useRef(null);
@@ -47,8 +52,9 @@ export default function GridColumnInput({ columns, onChange, id = "grid_columns"
         {t("analysis.columns")}
       </label>
       <div
-        className="flex min-h-[2.75rem] flex-wrap items-center gap-1.5 rounded-xl border border-line bg-paper px-2 py-1.5 ring-moss/30 focus-within:border-moss focus-within:ring-2"
-        onClick={() => inputRef.current?.focus()}
+        className="flex min-h-[2.75rem] flex-wrap items-center gap-1.5 rounded-xl border border-line bg-paper px-2 py-1.5 ring-moss/30 focus-within:border-moss focus-within:ring-2 disabled:opacity-60"
+        onClick={() => !disabled && inputRef.current?.focus()}
+        aria-disabled={disabled}
       >
         <ul className="contents" role="list" aria-label={t("analysis.columns")}>
           {columns.map((col, index) => (
@@ -77,6 +83,7 @@ export default function GridColumnInput({ columns, onChange, id = "grid_columns"
           id={`${id}_input`}
           type="text"
           value={draft}
+          disabled={disabled}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={handleKeyDown}
           onBlur={() => commitDraft(draft)}

@@ -70,6 +70,11 @@ function formatTokenTotal(tokenUsage, t, locale) {
   return tokenUsage.estimated ? `≈ ${formatted}` : formatted;
 }
 
+function formatModels(models, t) {
+  if (!Array.isArray(models) || !models.length) return t("common.noneDash");
+  return models.join(", ");
+}
+
 function ResultsList() {
   const navigate = useNavigate();
   const { t, locale } = useI18n();
@@ -178,6 +183,12 @@ function ResultsList() {
         render: (item) => item.prompt || t("results.noPrompt"),
       },
       {
+        key: "creator",
+        label: t("results.colCreator"),
+        render: (item) =>
+          item.creator_display_name?.trim() || t("common.noneDash"),
+      },
+      {
         key: "mode",
         label: t("results.colMode"),
         render: (item) => item.mode || t("common.noneDash"),
@@ -211,6 +222,21 @@ function ResultsList() {
             {formatTokenTotal(item.token_usage, t, locale)}
           </span>
         ),
+      },
+      {
+        key: "models",
+        label: t("results.colModels"),
+        render: (item) => {
+          const label = formatModels(item.models, t);
+          return (
+            <span
+              className="max-w-[14rem] truncate font-sans text-[13px]"
+              title={label === t("common.noneDash") ? undefined : label}
+            >
+              {label}
+            </span>
+          );
+        },
       },
       {
         key: "show",

@@ -3,6 +3,7 @@ import {
   readStoredLocale,
 } from "./i18n/applyLocale.js";
 import { installAutoRtl } from "./lib/autoRtl.js";
+import { initPwa } from "./lib/pwa.js";
 
 const THEME_STORAGE_KEY = "helix-theme";
 
@@ -38,8 +39,8 @@ createRoot(document.getElementById("root")).render(
 
 installAutoRtl();
 
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {});
-  });
-}
+window.addEventListener("load", () => {
+  initPwa();
+});
+
+

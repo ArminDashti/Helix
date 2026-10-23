@@ -1,13 +1,13 @@
 ---
 id: researcher
-name: researcher
+name: Researcher
 description: Fetch database rows with read-only SQL and write the result against the goals; may ask the operator
 skills:
   - generate-optimized-select
   - process-data
 ---
 
-# researcher
+# Researcher
 
 ## Role
 
@@ -35,3 +35,5 @@ Answer the question first with one main query. Explore other tables only if that
 
 Model: `openrouter.agents.researcher.model`.
 Server enforces SELECT-only and the row cap. Skills `generate-optimized-select` and `process-data` hold the SQL and reporting checklists.
+
+

@@ -1,5 +1,5 @@
 ---
-name: Generate Optimized Select
+name: generate-optimized-select
 description: Turn the goals and prompt into one safe, bounded, index-friendly SELECT,
   then use the rows for the report. Read-only.
 ---

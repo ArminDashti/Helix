@@ -1,28 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plug, Power, Server, Trash2, Upload } from "lucide-react";
-import {
-  configureSqlServerMcp,
-  deleteMcp,
-  fetchMcps,
-  importMcps,
-  toggleMcp,
-} from "../api/client.js";
+import { FlaskConical, Plug, Server } from "lucide-react";
+import { fetchMcps, testSqlServerMcp } from "../api/client.js";
 import IconButton from "../components/IconButton.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
 import { failMessage } from "../i18n/apiErrors.js";
 
-const SQL_BUSY = "__sql__";
-const IMPORT_BUSY = "__import__";
+const TEST_BUSY = "__test__";
 
-export default function McpPage() {
+export default function McpPage({ embedded = false }) {
   const { t } = useI18n();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [busy, setBusy] = useState("");
-  const [importText, setImportText] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -40,69 +32,16 @@ export default function McpPage() {
     load();
   }, [load]);
 
-  async function handleToggle(server) {
-    setBusy(server.name);
+  async function handleTest() {
+    setBusy(TEST_BUSY);
     setError(null);
     setNotice(null);
     try {
-      const next = await toggleMcp(server.name, !server.enabled);
-      setData(next);
+      await testSqlServerMcp();
+      setNotice(t("mcp.testOk"));
+      await load();
     } catch (err) {
-      setError(failMessage(err, t, "mcp.toggleFailed"));
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function handleImport() {
-    setBusy(IMPORT_BUSY);
-    setError(null);
-    setNotice(null);
-    let config;
-    try {
-      config = JSON.parse(importText);
-    } catch {
-      setError(t("mcp.invalidJson"));
-      setBusy("");
-      return;
-    }
-    try {
-      const next = await importMcps(config);
-      setData(next);
-      setImportText("");
-      setNotice(t("mcp.imported"));
-    } catch (err) {
-      setError(failMessage(err, t, "mcp.importFailed"));
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function handleDelete(server) {
-    if (!window.confirm(t("mcp.deleteConfirm", { name: server.name }))) return;
-    setBusy(server.name);
-    setError(null);
-    setNotice(null);
-    try {
-      const next = await deleteMcp(server.name);
-      setData(next);
-    } catch (err) {
-      setError(failMessage(err, t, "mcp.deleteFailed"));
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function handleConfigureSql() {
-    setBusy(SQL_BUSY);
-    setError(null);
-    setNotice(null);
-    try {
-      const next = await configureSqlServerMcp();
-      setData(next);
-      setNotice(t("mcp.configured"));
-    } catch (err) {
-      setError(failMessage(err, t, "mcp.configureFailed"));
+      setError(failMessage(err, t, "mcp.testFailed"));
     } finally {
       setBusy("");
     }
@@ -113,13 +52,28 @@ export default function McpPage() {
   }
 
   const servers = data?.servers || [];
-  const sqlServer = servers.find((s) => s.is_sql_server);
+  const sqlServer =
+    servers.find((s) => s.name === "helix-sqlserver") ||
+    servers.find((s) => s.is_sql_server);
 
   return (
-    <div className="hx-rise flex h-full min-h-0 flex-col gap-3">
-      <PageHeader icon={Plug} title={t("nav.mcp")}>
-        <p className="mt-1 text-sm text-muted">{t("mcp.subtitle")}</p>
-      </PageHeader>
+    <div
+      className={
+        embedded
+          ? "flex min-h-0 flex-col gap-3"
+          : "hx-rise flex h-full min-h-0 flex-col gap-3"
+      }
+    >
+      {embedded ? (
+        <div>
+          <h2 className="font-display text-lg font-semibold text-ink">{t("settings.tabMcp")}</h2>
+          <p className="mt-1 text-sm text-muted">{t("mcp.subtitle")}</p>
+        </div>
+      ) : (
+        <PageHeader icon={Plug} title={t("nav.mcp")}>
+          <p className="mt-1 text-sm text-muted">{t("mcp.subtitle")}</p>
+        </PageHeader>
+      )}
 
       {error ? (
         <p className="shrink-0 rounded-xl border border-warn-border bg-warn-bg px-4 py-2 text-sm text-warn">
@@ -140,6 +94,9 @@ export default function McpPage() {
               {t("mcp.sqlTitle")}
             </h2>
             <p className="mt-1 text-xs text-muted">{t("mcp.sqlDesc")}</p>
+            <p className="mt-2 font-mono text-[11px] text-muted" dir="ltr">
+              npx -y mssql-mcp-server
+            </p>
             <p className="mt-1 text-xs text-muted">
               {t("mcp.configPath")}
               <code className="ms-1 rounded-lg bg-fog/60 px-1.5 py-0.5 font-mono text-[11px] text-ink">
@@ -159,117 +116,39 @@ export default function McpPage() {
               >
                 {sqlServer.enabled ? t("mcp.enabled") : t("mcp.disabled")}
               </span>
-            ) : null}
+            ) : (
+              <span className="rounded-lg border border-line bg-fog/50 px-2 py-1 text-xs text-muted">
+                {t("mcp.notProvisioned")}
+              </span>
+            )}
             <IconButton
               type="button"
-              icon={Server}
-              disabled={busy === SQL_BUSY || !data?.exists}
-              onClick={handleConfigureSql}
+              icon={FlaskConical}
+              disabled={busy === TEST_BUSY}
+              onClick={handleTest}
               className="h-10 shrink-0 rounded-xl bg-moss px-4 text-sm font-semibold text-white hover:bg-moss-deep disabled:opacity-50"
             >
-              {busy === SQL_BUSY ? t("mcp.configuring") : t("mcp.configure")}
+              {busy === TEST_BUSY ? t("mcp.testing") : t("mcp.test")}
             </IconButton>
           </div>
         </div>
         {!data?.exists ? (
           <p className="mt-2 text-xs text-warn">{t("mcp.notFound")}</p>
         ) : null}
-      </section>
-
-      <section className="shrink-0 rounded-2xl border border-line/80 bg-paper/80 p-4">
-        <h2 className="text-sm font-semibold text-ink">{t("mcp.importTitle")}</h2>
-        <p className="mt-1 text-xs text-muted">{t("mcp.importDesc")}</p>
-        <textarea
-          value={importText}
-          onChange={(e) => setImportText(e.target.value)}
-          rows={5}
-          dir="ltr"
-          spellCheck={false}
-          placeholder={'{\n  "mcpServers": {\n    "name": { "command": "npx", "args": [] }\n  }\n}'}
-          className="mt-2 w-full rounded-xl border border-line bg-fog/40 p-2 font-mono text-xs text-ink"
-        />
-        <IconButton
-          type="button"
-          icon={Upload}
-          disabled={busy === IMPORT_BUSY || !data?.exists || !importText.trim()}
-          onClick={handleImport}
-          className="mt-2 h-10 rounded-xl bg-moss px-4 text-sm font-semibold text-white hover:bg-moss-deep disabled:opacity-50"
-        >
-          {busy === IMPORT_BUSY ? t("mcp.importing") : t("mcp.import")}
-        </IconButton>
-      </section>
-
-      <section className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto rounded-2xl border border-line/80 bg-paper/80 p-4">
-        <h2 className="shrink-0 text-sm font-semibold text-ink">
-          {t("mcp.listTitle")}
-        </h2>
-        {servers.length === 0 ? (
-          <p className="text-sm text-muted">{t("mcp.empty")}</p>
-        ) : (
-          <ul className="space-y-2">
-            {servers.map((server) => (
-              <li
-                key={server.name}
-                className="flex flex-wrap items-center gap-3 rounded-xl border border-line/70 bg-fog/40 px-3 py-2"
-              >
-                <span className="min-w-[10rem] font-mono text-sm font-semibold text-ink">
-                  {server.name}
-                </span>
-                <span className="rounded-lg border border-line bg-fog/60 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide text-muted">
-                  {server.transport === "http" ? "HTTP" : "stdio"}
-                </span>
-                <span className="min-w-0 max-w-[28rem] flex-1 truncate font-mono text-xs text-muted">
-                  {server.transport === "http"
-                    ? server.url
-                    : [server.command, ...server.args].join(" ")}
-                </span>
-                {server.env_keys?.length ? (
-                  <span className="max-w-[16rem] truncate text-[11px] text-muted">
-                    {t("mcp.envKeys")}: {server.env_keys.join(", ")}
-                  </span>
-                ) : null}
-                <span
-                  className={[
-                    "ms-auto shrink-0 rounded-lg border px-2 py-0.5 text-[11px] font-semibold",
-                    server.enabled
-                      ? "border-moss/40 bg-moss/10 text-moss"
-                      : "border-line bg-fog/50 text-muted",
-                  ].join(" ")}
-                >
-                  {server.enabled ? t("mcp.enabled") : t("mcp.disabled")}
-                </span>
-                <IconButton
-                  type="button"
-                  icon={Power}
-                  disabled={busy === server.name || !data?.exists}
-                  onClick={() => handleToggle(server)}
-                  className={[
-                    "h-10 shrink-0 rounded-xl px-3 text-xs font-semibold transition",
-                    server.enabled
-                      ? "border border-line bg-fog/60 text-ink hover:bg-fog"
-                      : "border border-moss/40 bg-moss text-white hover:bg-moss-deep",
-                  ].join(" ")}
-                >
-                  {busy === server.name
-                    ? "…"
-                    : server.enabled
-                      ? t("mcp.disable")
-                      : t("mcp.enable")}
-                </IconButton>
-                <IconButton
-                  type="button"
-                  icon={Trash2}
-                  disabled={busy === server.name || !data?.exists}
-                  onClick={() => handleDelete(server)}
-                  className="h-10 shrink-0 rounded-xl border border-warn-border bg-warn-bg px-3 text-xs font-semibold text-warn hover:opacity-90 disabled:opacity-50"
-                >
-                  {t("mcp.delete")}
-                </IconButton>
-              </li>
-            ))}
-          </ul>
-        )}
+        {sqlServer ? (
+          <p className="mt-3 truncate font-mono text-xs text-muted" dir="ltr">
+            {[sqlServer.command, ...(sqlServer.args || [])].join(" ")}
+          </p>
+        ) : null}
       </section>
     </div>
   );
 }
+
+
+
+
+
+
+
+

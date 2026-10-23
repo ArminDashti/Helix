@@ -2,6 +2,12 @@
   "orchester/orchestrate-pipeline": [
     "orchester"
   ],
+  "orchester/verify-research-access": [
+    "orchester"
+  ],
+  "orchester/sanitize-response-privacy": [
+    "orchester"
+  ],
   "researcher/generate-optimized-select": [
     "researcher"
   ],

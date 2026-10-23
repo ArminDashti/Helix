@@ -507,267 +507,6 @@ def compile_pipeline_flow(
     return _compile_stages(flow, positions or {})
 
 
-class _FlowCompiler:  # removed — single orchester has no loop/sequence compilation
-    pass
-
-
-def _when_key(when: dict[str, Any] | None) -> tuple[str, str]:
-    when = when or {}
-    return (str(when.get("type") or "always"), str(when.get("status") or ""))
-
-
-def _topology(graph: dict[str, Any]) -> set[tuple[str, str, str, str]]:
-    return {
-        (e["source"], e["target"], *_when_key(e.get("when")))
-        for e in graph.get("edges") or []
-    }
-
-
-def infer_pipeline_flow(graph: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
-    """Best-effort stages flow from a graph. None if Arrange cannot represent it."""
-    try:
-        graph = normalize_pipeline_graph(graph)
-        flow = _infer_stages_from_graph(graph)
-        compiled = compile_pipeline_flow(
-            flow,
-            {n["id"]: n["position"] for n in graph.get("nodes") or []},
-        )
-        if {n["id"] for n in compiled["nodes"]} != {n["id"] for n in graph["nodes"]}:
-            return None, "Arrange needs one IF per stage."
-        if _topology(compiled) != _topology(graph):
-            return None, "Arrange needs one IF per stage."
-        return flow, None
-    except (ValueError, KeyError, TypeError) as exc:
-        return None, str(exc) or "Arrange needs one IF per stage."
-
-
-def _infer_stages_from_graph(graph: dict[str, Any]) -> dict[str, Any]:
-    node_ids = [n["id"] for n in graph.get("nodes") or []]
-    if not node_ids:
-        raise ValueError("pipeline_graph.nodes must include at least one agent")
-    outgoing: dict[str, list[dict[str, Any]]] = {nid: [] for nid in node_ids}
-    for edge in graph.get("edges") or []:
-        src = edge.get("source")
-        if src in outgoing:
-            outgoing[src].append(edge)
-    stages: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    current = graph.get("entry") or node_ids[0]
-    while current and current not in seen:
-        seen.add(current)
-        edges = outgoing.get(current) or []
-        if len(edges) > 1:
-            raise ValueError("Arrange needs one IF per stage.")
-        if not edges:
-            break
-        edge = edges[0]
-        when = edge.get("when") or {}
-        wtype = when.get("type") or "always"
-        target = str(edge.get("target") or "")
-        if wtype in ("always", "on_success") and not when.get("invert"):
-            stages.append(
-                {
-                    "type": "stage",
-                    "agent_id": current,
-                    "action": "proceed",
-                    "then": "proceed",
-                    "next_agent_id": target,
-                }
-            )
-        elif wtype == "on_status":
-            invert = bool(when.get("invert"))
-            stages.append(
-                {
-                    "type": "stage",
-                    "agent_id": current,
-                    "action": "if_not" if invert else "if",
-                    "result_op": "equal",
-                    "expected": str(when.get("status") or ""),
-                    "then": "proceed",
-                    "next_agent_id": target,
-                }
-            )
-        else:
-            raise ValueError("Arrange needs one IF per stage.")
-        current = target
-    unused = [nid for nid in node_ids if nid not in seen]
-    if unused:
-        raise ValueError("Arrange needs one IF per stage.")
-    if not stages:
-        stages = [
-            {
-                "type": "stage",
-                "agent_id": node_ids[0],
-                "action": "proceed",
-                "then": "stop",
-            }
-        ]
-    return _normalize_stages({"type": "stages", "children": stages})
-
-
-def _infer_from_spine(graph: dict[str, Any]) -> dict[str, Any]:
-    node_ids = [n["id"] for n in graph.get("nodes") or []]
-    if not node_ids:
-        raise ValueError("pipeline_graph.nodes must include at least one agent")
-    outgoing: dict[str, list[dict[str, Any]]] = {nid: [] for nid in node_ids}
-    incoming_count: dict[str, int] = {nid: 0 for nid in node_ids}
-    for edge in graph.get("edges") or []:
-        outgoing[edge["source"]].append(edge)
-        incoming_count[edge["target"]] = incoming_count.get(edge["target"], 0) + 1
-
-    entry = graph.get("entry") or node_ids[0]
-    used_edges: set[str] = set()
-
-    def take_forwards(source: str) -> list[dict[str, Any]]:
-        found = []
-        for edge in outgoing.get(source) or []:
-            if edge["id"] in used_edges:
-                continue
-            found.append(edge)
-        return found
-
-    if_counter = 0
-
-    def parse_until(start: str | None, stops: set[str], depth: int = 0) -> tuple[list[dict[str, Any]], str | None]:
-        nonlocal if_counter
-        children: list[dict[str, Any]] = []
-        current = start
-        seen_local: set[str] = set()
-        while current and current not in stops:
-            if current in seen_local:
-                raise ValueError("Arrange needs a single Then/Else per If.")
-            seen_local.add(current)
-            children.append({"type": "agent", "id": current})
-            forwards = take_forwards(current)
-            then_edges = [
-                e for e in forwards if e.get("role") == "then" or e.get("kind") in ("if", "result_is")
-            ]
-            else_edges = [e for e in forwards if e.get("role") == "else"]
-            then_edges = [e for e in then_edges if e not in else_edges]
-            fail_edges = [
-                e
-                for e in forwards
-                if (e.get("when") or {}).get("type") == "on_failure" and e.get("role") not in ("then", "else")
-            ]
-            always_edges = [
-                e
-                for e in forwards
-                if e not in then_edges
-                and e not in else_edges
-                and e not in fail_edges
-            ]
-
-            branch_then = then_edges or fail_edges
-            branch_else = else_edges
-            if not branch_then and not branch_else and len(always_edges) > 1:
-                raise ValueError("Arrange needs a single Then/Else per If.")
-            if branch_then or (len(always_edges) + len(fail_edges) > 1 and fail_edges):
-                if len(branch_then) > 1 or len(branch_else) > 1:
-                    raise ValueError("Arrange needs a single Then/Else per If.")
-                then_edge = branch_then[0] if branch_then else None
-                else_edge = branch_else[0] if branch_else else None
-                leftover_always = [
-                    e
-                    for e in always_edges
-                    if (not else_edge or e["id"] != else_edge["id"])
-                    and (not then_edge or e["id"] != then_edge["id"])
-                ]
-                if not else_edge and leftover_always:
-                    else_edge = leftover_always[0]
-                    leftover_always = leftover_always[1:]
-                if leftover_always:
-                    raise ValueError("Arrange needs a single Then/Else per If.")
-                then_target = then_edge["target"] if then_edge else None
-                else_target = else_edge["target"] if else_edge else None
-                if then_edge:
-                    used_edges.add(then_edge["id"])
-                if else_edge:
-                    used_edges.add(else_edge["id"])
-                join = _find_join(then_target, else_target, outgoing, node_ids)
-                then_children, _ = parse_until(then_target, {join} if join else set(), depth + 1) if then_target else ([], None)
-                else_children, _ = parse_until(else_target, {join} if join else set(), depth + 1) if else_target else ([], None)
-                if_counter += 1
-                when = deepcopy((then_edge or {}).get("when") or {"type": "on_failure"})
-                then_id = str((then_edge or {}).get("id") or "")
-                if_id = f"if_{if_counter}"
-                if then_id.startswith("e_if_") and then_id.endswith("_then"):
-                    if_id = then_id[len("e_if_") : -len("_then")]
-                elif then_id.startswith("e_result_") and then_id.endswith("_then"):
-                    if_id = then_id[len("e_result_") : -len("_then")]
-                if_block: dict[str, Any] = {
-                    "type": "if",
-                    "id": if_id,
-                    "when": when,
-                    "then": {"type": "sequence", "children": then_children},
-                    "else": {"type": "sequence", "children": else_children},
-                }
-                cap = edge_limit(then_edge or else_edge)
-                if cap != DEFAULT_EDGE_LIMIT:
-                    if_block["limit"] = cap
-                children.append(if_block)
-                current = join
-                continue
-
-            if len(always_edges) == 1:
-                used_edges.add(always_edges[0]["id"])
-                cap = edge_limit(always_edges[0])
-                if children and children[-1].get("type") == "agent" and cap != DEFAULT_EDGE_LIMIT:
-                    children[-1]["forward_limit"] = cap
-                current = always_edges[0]["target"]
-                continue
-            if not always_edges:
-                current = None
-                continue
-            raise ValueError("Arrange needs a single Then/Else per If.")
-        return children, current
-
-    children, _ = parse_until(entry, set())
-    unused = [e for e in graph.get("edges") or [] if e["id"] not in used_edges]
-    if unused:
-        raise ValueError("Arrange needs a single Then/Else per If.")
-    covered: list[str] = []
-    flow = {"type": "sequence", "children": children}
-    _collect_agent_ids(flow, covered)
-    if set(covered) != set(node_ids):
-        raise ValueError("Arrange needs a single Then/Else per If.")
-    return flow
-
-
-def _find_join(
-    then_start: str | None,
-    else_start: str | None,
-    outgoing: dict[str, list[dict[str, Any]]],
-    node_ids: list[str],
-) -> str | None:
-    def reachable(start: str | None) -> set[str]:
-        if not start:
-            return set()
-        seen: set[str] = set()
-        stack = [start]
-        while stack:
-            node = stack.pop()
-            if node in seen:
-                continue
-            seen.add(node)
-            for edge in outgoing.get(node) or []:
-                stack.append(edge["target"])
-        return seen
-
-    then_r = reachable(then_start)
-    else_r = reachable(else_start)
-    if not then_start:
-        return else_start
-    if not else_start:
-        return then_start
-    both = then_r & else_r
-    if not both:
-        return None
-    for nid in node_ids:
-        if nid in both:
-            return nid
-    return next(iter(both), None)
-
-
 def _infer_entry(
     nodes: list[dict[str, Any]], edges: list[dict[str, Any]]
 ) -> str | None:
@@ -778,92 +517,21 @@ def _infer_entry(
     return nodes[0]["id"] if nodes else None
 
 
-def _positions_from_graph(graph: dict[str, Any] | None) -> dict[str, dict[str, float]]:
-    out: dict[str, dict[str, float]] = {}
-    if not graph or not isinstance(graph, dict):
-        return out
-    for node in graph.get("nodes") or []:
-        if not isinstance(node, dict):
-            continue
-        nid = str(node.get("id") or "").strip()
-        pos = node.get("position") if isinstance(node.get("position"), dict) else {}
-        if nid:
-            try:
-                out[nid] = {"x": float(pos.get("x", 0)), "y": float(pos.get("y", 0))}
-            except (TypeError, ValueError):
-                out[nid] = {"x": 0.0, "y": 0.0}
-    return out
-
-
-def get_pipeline_bundle() -> dict[str, Any]:
+def get_pipeline_graph() -> dict[str, Any]:
     data = load_config()
     raw_graph = data.get("pipeline_graph")
-    raw_flow = data.get("pipeline_flow")
-    graph: dict[str, Any]
-    flow: dict[str, Any] | None
-    arrange_error: str | None = None
-
     if isinstance(raw_graph, dict) and raw_graph.get("nodes"):
         try:
-            graph = normalize_pipeline_graph(raw_graph)
+            return normalize_pipeline_graph(raw_graph)
         except ValueError:
-            graph = default_pipeline_graph()
-            flow = default_pipeline_flow()
-            return {
-                "pipeline_graph": graph,
-                "pipeline_flow": flow,
-                "arrange_compatible": True,
-                "arrange_error": None,
-            }
-    else:
-        flow = default_pipeline_flow()
-        graph = compile_pipeline_flow(flow)
-        return {
-            "pipeline_graph": graph,
-            "pipeline_flow": flow,
-            "arrange_compatible": True,
-            "arrange_error": None,
-        }
-
+            return default_pipeline_graph()
+    raw_flow = data.get("pipeline_flow")
     if isinstance(raw_flow, dict) and raw_flow.get("type"):
         try:
-            flow = normalize_pipeline_flow(raw_flow)
-            compiled = compile_pipeline_flow(flow, _positions_from_graph(graph))
-            if {n["id"] for n in compiled["nodes"]} == {n["id"] for n in graph["nodes"]}:
-                graph = {
-                    "entry": compiled["entry"],
-                    "nodes": [
-                        {
-                            "id": n["id"],
-                            "position": next(
-                                (g["position"] for g in graph["nodes"] if g["id"] == n["id"]),
-                                n["position"],
-                            ),
-                        }
-                        for n in compiled["nodes"]
-                    ],
-                    "edges": compiled["edges"],
-                }
-            else:
-                inferred, err = infer_pipeline_flow(graph)
-                flow, arrange_error = inferred, err
-        except ValueError as exc:
-            inferred, err = infer_pipeline_flow(graph)
-            flow, arrange_error = inferred, err or str(exc)
-    else:
-        inferred, err = infer_pipeline_flow(graph)
-        flow, arrange_error = inferred, err
-
-    return {
-        "pipeline_graph": graph,
-        "pipeline_flow": flow,
-        "arrange_compatible": flow is not None and not arrange_error,
-        "arrange_error": arrange_error,
-    }
-
-
-def get_pipeline_graph() -> dict[str, Any]:
-    return get_pipeline_bundle()["pipeline_graph"]
+            return compile_pipeline_flow(normalize_pipeline_flow(raw_flow))
+        except ValueError:
+            pass
+    return default_pipeline_graph()
 
 
 def get_pipeline_graph_for_mode(mode: str) -> dict[str, Any]:
@@ -871,72 +539,6 @@ def get_pipeline_graph_for_mode(mode: str) -> dict[str, Any]:
     if str(mode or "").strip().lower() == "research":
         return compile_pipeline_flow(research_pipeline_flow())
     return get_pipeline_graph()
-
-
-def get_pipeline_flow() -> dict[str, Any] | None:
-    return get_pipeline_bundle().get("pipeline_flow")
-
-
-def update_pipeline_bundle(payload: dict[str, Any] | None) -> dict[str, Any]:
-    payload = payload if isinstance(payload, dict) else {}
-    data = load_config()
-    raw_flow = payload.get("pipeline_flow")
-    raw_graph = payload.get("pipeline_graph")
-    if raw_flow is None and isinstance(payload.get("type"), str):
-        raw_flow = payload
-    if raw_graph is None and isinstance(payload.get("nodes"), list):
-        raw_graph = payload
-
-    positions = _positions_from_graph(raw_graph if isinstance(raw_graph, dict) else None)
-
-    if isinstance(raw_flow, dict) and raw_flow.get("type"):
-        flow = normalize_pipeline_flow(raw_flow)
-        graph = compile_pipeline_flow(flow, positions)
-        data["pipeline_flow"] = deepcopy(flow)
-        data["pipeline_graph"] = deepcopy(graph)
-        save_config(data)
-        return {
-            "pipeline_graph": graph,
-            "pipeline_flow": flow,
-            "arrange_compatible": True,
-            "arrange_error": None,
-        }
-
-    if isinstance(raw_graph, dict):
-        graph = normalize_pipeline_graph(raw_graph)
-        flow, err = infer_pipeline_flow(graph)
-        data["pipeline_graph"] = deepcopy(graph)
-        data["pipeline_flow"] = deepcopy(flow) if flow else None
-        save_config(data)
-        return {
-            "pipeline_graph": graph,
-            "pipeline_flow": flow,
-            "arrange_compatible": flow is not None and not err,
-            "arrange_error": err,
-        }
-
-    raise ValueError("Provide pipeline_flow or pipeline_graph")
-
-
-def update_pipeline_graph(payload: dict[str, Any]) -> dict[str, Any]:
-    bundle = update_pipeline_bundle({"pipeline_graph": payload})
-    return bundle["pipeline_graph"]
-
-
-def reset_pipeline_graph() -> dict[str, Any]:
-    flow = default_pipeline_flow()
-    graph = compile_pipeline_flow(flow)
-    data = load_config()
-    data["pipeline_graph"] = deepcopy(graph)
-    data["pipeline_flow"] = deepcopy(flow)
-    save_config(data)
-    return graph
-
-
-def reset_pipeline_bundle() -> dict[str, Any]:
-    reset_pipeline_graph()
-    return get_pipeline_bundle()
-
 
 def edge_matches(when: dict[str, Any], status: str) -> bool:
     wtype = when.get("type") or "always"
@@ -1010,3 +612,38 @@ def agent_display_name(agent_id: str) -> str:
     from .config_loader import agent_company_label
 
     return agent_company_label(agent_id)
+
+
+
+def get_pipeline_bundle() -> dict[str, Any]:
+    """Admin/settings wire shape: graph plus optional saved flow."""
+    data = load_config()
+    raw_flow = data.get("pipeline_flow")
+    flow = raw_flow if isinstance(raw_flow, dict) else None
+    return {
+        "pipeline_graph": get_pipeline_graph(),
+        "pipeline_flow": flow,
+        "arrange_error": None,
+    }
+
+
+def reset_pipeline_bundle() -> dict[str, Any]:
+    data = load_config()
+    data.pop("pipeline_graph", None)
+    data.pop("pipeline_flow", None)
+    save_config(data)
+    return get_pipeline_bundle()
+
+
+def update_pipeline_bundle(payload: dict[str, Any] | None) -> dict[str, Any]:
+    payload = payload if isinstance(payload, dict) else {}
+    data = load_config()
+    if "pipeline_graph" in payload and isinstance(payload["pipeline_graph"], dict):
+        data["pipeline_graph"] = normalize_pipeline_graph(payload["pipeline_graph"])
+    raw_flow = payload.get("pipeline_flow")
+    if raw_flow is None and isinstance(payload.get("type"), str):
+        raw_flow = payload
+    if isinstance(raw_flow, dict) and raw_flow.get("type"):
+        data["pipeline_flow"] = normalize_pipeline_flow(raw_flow)
+    save_config(data)
+    return get_pipeline_bundle()

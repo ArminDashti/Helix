@@ -13,7 +13,10 @@ import {
 import {
   DEFAULT_PDF_DESIGN,
   FONT_OPTIONS,
+  CANVAS_ITEM_IDS,
+  CANVAS_LAYOUT_ID,
   PDF_ELEMENT_IDS,
+  a4PageCssPx,
   designForExport,
   loadPdfDesign,
   normalizePdfDesign,
@@ -41,13 +44,14 @@ const SAMPLE_GRID_FA = {
 };
 
 const ELEMENT_LABEL_KEYS = {
+  [CANVAS_LAYOUT_ID]: "canvas.elementLayout",
   header: "canvas.elementHeader",
-  helixLogo: "canvas.showHelixLogo",
-  companyLogo: "canvas.showCompanyLogo",
+  helixLogo: "canvas.leftLogo",
+  companyLogo: "canvas.rightLogo",
   title: "canvas.showTitle",
-  charts: "canvas.showCharts",
-  text: "canvas.showText",
+  text: "canvas.showResearch",
   grid: "canvas.showGrid",
+  charts: "canvas.showCharts",
   footer: "canvas.showFooter",
 };
 
@@ -59,7 +63,7 @@ const TEXT_ALIGN_ELEMENTS = new Set(["title", "text", "footer"]);
 export default function CanvasPage() {
   const { t, locale } = useI18n();
   const [design, setDesign] = useState(() => loadPdfDesign());
-  const [selectedElement, setSelectedElement] = useState("header");
+  const [selectedElement, setSelectedElement] = useState(CANVAS_LAYOUT_ID);
   const [previewHtml, setPreviewHtml] = useState("");
   const [saving, setSaving] = useState(false);
   const [logoError, setLogoError] = useState(null);
@@ -88,6 +92,13 @@ export default function CanvasPage() {
   const footerFallback = pdfLabels.pdfFooter;
 
   const activeEl = design.elements?.[selectedElement] || {};
+  const a4Preview = useMemo(
+    () =>
+      a4PageCssPx(
+        design.orientation === "portrait" ? "portrait" : "landscape",
+      ),
+    [design.orientation],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -178,6 +189,7 @@ export default function CanvasPage() {
 
   function updateElementField(field, value) {
     const id = selectedElement;
+    if (id === CANVAS_LAYOUT_ID) return;
     persistDesign({
       ...design,
       elements: {
@@ -258,7 +270,7 @@ export default function CanvasPage() {
     };
     savePdfDesign(next);
     setDesign(loadPdfDesign());
-    setSelectedElement("header");
+    setSelectedElement(CANVAS_LAYOUT_ID);
     setLogoError(null);
     setDesignNotice(null);
   }
@@ -305,30 +317,26 @@ export default function CanvasPage() {
           className="h-full min-h-0 space-y-3 overflow-y-auto overscroll-contain rounded-2xl border border-line/80 bg-paper/80 p-4"
           onWheel={(e) => e.stopPropagation()}
         >
-          <h2 className="text-sm font-semibold text-ink">
-            {t("canvas.options")}
-          </h2>
-
-          <div>
-            <label
-              htmlFor="canvas_element"
-              className="block text-sm font-medium text-ink"
-            >
-              {t("canvas.selectElement")}
-            </label>
-            <select
-              id="canvas_element"
-              value={selectedElement}
-              onChange={(e) => setSelectedElement(e.target.value)}
-              className={inputClass}
-            >
-              {PDF_ELEMENT_IDS.map((id) => (
-                <option key={id} value={id}>
-                  {t(ELEMENT_LABEL_KEYS[id] || id)}
-                </option>
-              ))}
-            </select>
-          </div>
+          <h2 className="text-sm font-semibold text-ink">{t("canvas.items")}</h2>
+          <nav className="flex flex-col gap-1" aria-label={t("canvas.items")}>
+            {CANVAS_ITEM_IDS.map((id) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setSelectedElement(id)}
+                className={
+                  selectedElement === id
+                    ? "rounded-xl bg-moss px-3 py-2 text-left text-sm font-semibold text-white"
+                    : "rounded-xl px-3 py-2 text-left text-sm font-medium text-ink hover:bg-fog/80"
+                }
+              >
+                {t(ELEMENT_LABEL_KEYS[id] || id)}
+              </button>
+            ))}
+          </nav>
+          <p className="border-t border-line/60 pt-2 text-sm font-medium text-ink">
+            {t("canvas.itemValues")}
+          </p>
 
           <div>
             <label
@@ -727,16 +735,30 @@ export default function CanvasPage() {
         </aside>
 
         <div className="min-h-0 overflow-auto rounded-2xl border border-line/80 bg-fog/30 p-3">
-          <h2 className="mb-2 text-sm font-semibold text-ink">
-            {t("canvas.preview")}
-          </h2>
-          <div
-            className="overflow-auto rounded-xl border border-line bg-white p-2 shadow-sm"
-            onClick={handlePreviewClick}
-            onKeyDown={() => {}}
-            role="presentation"
-            dangerouslySetInnerHTML={{ __html: previewHtml }}
-          />
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-ink">
+              {t("canvas.preview")}
+            </h2>
+            <span className="text-xs text-muted">{t("canvas.a4PreviewHint")}</span>
+          </div>
+          <div className="flex justify-center overflow-auto pb-2">
+            <div
+              className="shrink-0 overflow-hidden rounded-xl border border-line shadow-sm"
+              style={{
+                width: a4Preview.width,
+                minHeight: a4Preview.height,
+                background: design.pageBackgroundColor || "#ffffff",
+              }}
+            >
+              <div
+                style={{ width: a4Preview.width }}
+                onClick={handlePreviewClick}
+                onKeyDown={() => {}}
+                role="presentation"
+                dangerouslySetInnerHTML={{ __html: previewHtml }}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>

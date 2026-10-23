@@ -4,6 +4,8 @@ name: Orchester
 description: Inspect the human prompt, set goals, ask the operator, validate the result, package it for the UI
 skills:
   - orchestrate-pipeline
+  - verify-research-access
+  - sanitize-response-privacy
 ---
 
 # Orchester
@@ -37,3 +39,4 @@ Human → orchester → researcher → orchester → Human
 
 Model: `openrouter.agents.orchester.model`.
 Runtime: LangGraph (`api/pipeline_langgraph.py`).
+

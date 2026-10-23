@@ -21,6 +21,20 @@ export const PDF_ELEMENT_IDS = [
   "footer",
 ];
 
+/** Page-level canvas item (orientation, margins); not a PDF block style. */
+export const CANVAS_LAYOUT_ID = "__layout__";
+
+export const CANVAS_ITEM_IDS = [CANVAS_LAYOUT_ID, ...PDF_ELEMENT_IDS];
+
+/** A4 page size in CSS pixels at 96dpi (matches PDF export). */
+export function a4PageCssPx(orientation) {
+  const portrait = orientation === "portrait";
+  return {
+    width: portrait ? 794 : 1123,
+    height: portrait ? 1123 : 794,
+  };
+}
+
 const BASE_FONT = "Vazirmatn,system-ui,sans-serif";
 
 function createElementStyle(overrides = {}) {
@@ -116,6 +130,20 @@ function mergeElement(id, partial) {
   };
 }
 
+export function normalizeCustomElement(raw = {}, index = 0) {
+  const id = String(raw.id || "").trim() || `custom-${index + 1}`;
+  const style = mergeElement("text", raw);
+  return {
+    id,
+    label: typeof raw.label === "string" ? raw.label : "",
+    content: typeof raw.content === "string" ? raw.content : "",
+    visible: raw.visible !== undefined ? Boolean(raw.visible) : true,
+    offsetX: clampInt(raw.offsetX, -400, 400, 0),
+    offsetY: clampInt(raw.offsetY, -400, 400, 0),
+    ...style,
+  };
+}
+
 /** Normalize stored / partial design (legacy show* flags → elements). */
 export function normalizePdfDesign(raw = {}) {
   const next = {
@@ -145,6 +173,9 @@ export function normalizePdfDesign(raw = {}) {
         ? Boolean(raw.footerShowPageNumbers)
         : DEFAULT_PDF_DESIGN.footerShowPageNumbers,
     elements: defaultElements(),
+    customElements: Array.isArray(raw.customElements)
+      ? raw.customElements.map((el, i) => normalizeCustomElement(el, i))
+      : [],
   };
 
   if (raw.elements && typeof raw.elements === "object") {

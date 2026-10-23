@@ -24,6 +24,7 @@ ENGINE_ALIASES = {
     "sqlserver": "sqlserver",
     "mssql": "sqlserver",
     "sqlite": "sqlite",
+    "mysql": "mysql",
 }
 
 

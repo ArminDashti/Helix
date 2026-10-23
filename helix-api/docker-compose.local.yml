@@ -34,7 +34,7 @@ services:
       - helix-pip-cache:/root/.cache/pip
       - helix-sqlite-data:/app/backend/data
     ports:
-      - "8173:8000"
+      - "5181:8000"
     networks:
       default: {}
       helix-net:
@@ -88,3 +88,4 @@ networks:
   helix-net:
     name: helix-net
     external: true
+

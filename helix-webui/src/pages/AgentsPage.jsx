@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Ban, Bot, LayoutList, ListChecks, ListTree, Network, Pencil, Trash2 } from "lucide-react";
+import { Ban, Bot, ListChecks, Pencil, Trash2 } from "lucide-react";
 import {
   deleteAgent,
   fetchAgents,
   fetchSkills,
   setAgentDisabled,
 } from "../api/client.js";
-import PipelineDesigner from "../components/PipelineDesigner.jsx";
 import DataGrid from "../components/DataGrid.jsx";
 import FlashMessage from "../components/FlashMessage.jsx";
 import IconButton from "../components/IconButton.jsx";
@@ -19,6 +18,7 @@ import StackedNames from "../components/StackedNames.jsx";
 import { sortByLabel } from "../utils/sortOptions.js";
 import { agentCompanyLabel } from "../utils/agentLabel.js";
 import { useLiveSync } from "../context/LiveSyncContext.jsx";
+import { resolveAgentIcon } from "../lib/agentIcons.js";
 
 function namesForAgent(agentId, items, locale) {
   return sortByLabel(
@@ -39,24 +39,24 @@ export default function AgentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [status, setStatus] = useFlash();
-  const [view, setView] = useState("list");
 
   async function reload() {
-    const [a, s] = await Promise.all([
-      fetchAgents(),
-      fetchSkills(),
-    ]);
+    const [a, s] = await Promise.all([fetchAgents(), fetchSkills()]);
     setAgents(a || []);
     setSkills(s || []);
   }
 
   useLiveSync(["agents", "skills"], () => reload().catch(() => {}));
-  useLiveSync("pipeline_graph", () => reload().catch(() => {}));
   useEffect(() => {
-    function onFocusVis() { if (document.visibilityState !== "hidden") reload().catch(() => {}); }
+    function onFocusVis() {
+      if (document.visibilityState !== "hidden") reload().catch(() => {});
+    }
     window.addEventListener("focus", onFocusVis);
     document.addEventListener("visibilitychange", onFocusVis);
-    return () => { window.removeEventListener("focus", onFocusVis); document.removeEventListener("visibilitychange", onFocusVis); };
+    return () => {
+      window.removeEventListener("focus", onFocusVis);
+      document.removeEventListener("visibilitychange", onFocusVis);
+    };
   }, []);
 
   useEffect(() => {
@@ -85,17 +85,8 @@ export default function AgentsPage() {
   const rows = useMemo(
     () =>
       agents
-        .filter((agent) =>
-          ["orchester", "researcher"].includes(agent.id),
-        )
+        .filter((agent) => ["orchester", "researcher"].includes(agent.id))
         .map((agent) => ({ key: agent.id, item: agent })),
-    [agents],
-  );
-  const pipelineAgents = useMemo(
-    () =>
-      agents.filter((agent) =>
-        ["orchester", "researcher"].includes(agent.id),
-      ),
     [agents],
   );
 
@@ -142,7 +133,15 @@ export default function AgentsPage() {
     {
       key: "name",
       label: t("common.name"),
-      render: (agent) => agent.name || agent.id,
+      render: (agent) => {
+        const Icon = resolveAgentIcon(agent.icon);
+        return (
+          <span className="inline-flex items-center gap-2">
+            <Icon className="h-4 w-4 shrink-0 text-moss" aria-hidden />
+            <span>{agent.name || agent.id}</span>
+          </span>
+        );
+      },
     },
     {
       key: "role",
@@ -209,61 +208,18 @@ export default function AgentsPage() {
 
   return (
     <div className="hx-rise flex h-full min-h-0 flex-col gap-2">
-      <PageHeader
-        icon={Bot}
-        title={t("agents.title")}
-        actions={
-          <>
-            <div
-              className="flex rounded-xl border border-line bg-fog/40 p-0.5"
-              role="tablist"
-              aria-label={t("agents.viewAria")}
-            >
-              {[
-                { id: "list", label: t("agents.viewList"), icon: LayoutList },
-                { id: "arrange", label: t("agents.viewArrange"), icon: ListTree },
-                { id: "graph", label: t("agents.viewGraph"), icon: Network },
-              ].map((tab) => (
-                <IconButton
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  icon={tab.icon}
-                  aria-selected={view === tab.id}
-                  onClick={() => setView(tab.id)}
-                  className={[
-                    "rounded-lg px-3 py-1.5 text-sm font-medium transition",
-                    view === tab.id
-                      ? "bg-moss text-white"
-                      : "text-ink hover:bg-fog",
-                  ].join(" ")}
-                >
-                  {tab.label}
-                </IconButton>
-              ))}
-            </div>
-          </>
-        }
-      />
-      {error && view === "list" ? (
+      <PageHeader icon={Bot} title={t("agents.title")} />
+      {error ? (
         <p className="shrink-0 rounded-xl border border-warn-border bg-warn-bg px-4 py-2 text-sm text-warn">
           {error}
         </p>
       ) : null}
-      {view === "list" ? <FlashMessage message={status} /> : null}
-      {view === "list" ? (
-        <DataGrid columns={columns} rows={rows} emptyLabel={t("common.noAgents")} />
-      ) : null}
-      <div
-        className={
-          view === "list" ? "hidden" : "flex min-h-0 flex-1 flex-col"
-        }
-      >
-        <PipelineDesigner
-          agents={pipelineAgents}
-          mode={view === "list" ? "arrange" : view}
-        />
-      </div>
+      <FlashMessage message={status} />
+      <DataGrid
+        columns={columns}
+        rows={rows}
+        emptyLabel={t("common.noAgents")}
+      />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   DEFAULT_PDF_DESIGN,
   elementStyle,
   loadPdfDesign,
+  normalizeCustomElement,
   normalizePdfDesign,
 } from "./pdfDesign.js";
 
@@ -314,9 +315,28 @@ export function buildPdfHtml({
       ? `<div data-canvas-element="footer" style="${cssBox(footerEl, `margin-top:14px;border-top:${footerDividerPx}px solid ${footerDividerColor};text-align:${footerAlign};`)}">${footerText}</div>`
       : "";
 
+  const customInline = (prefs.customElements || [])
+    .filter((el) => el.visible !== false)
+    .map((el) => {
+      const ox = Number(el.offsetX) || 0;
+      const oy = Number(el.offsetY) || 0;
+      const nudge =
+        ox || oy ? `transform:translate(${ox}px,${oy}px);` : "";
+      const safeId = escapeHtml(el.id);
+      const safeContent = escapeHtml(el.content);
+      if (!safeContent) {
+        return `<div data-canvas-element="${safeId}" style="${cssBox(el, `${nudge}min-height:8px;margin-bottom:14px;`)}"></div>`;
+      }
+      return `<div data-canvas-element="${safeId}" style="${cssBox(el, `${nudge}white-space:pre-wrap;line-height:1.6;margin-bottom:14px;`)}" dir="${dir}">${safeContent}</div>`;
+    })
+    .join("");
+
   const rootFont = elementStyle(prefs, "text");
+  const pagePad = Math.min(24, Math.max(8, Number(prefs.pageMarginMm) || 12));
+  const padPx = Math.round(pagePad * (96 / 25.4));
+  const bodyInline = `${articleInline}${gridInline}${chartImgInline}${customInline}`;
   return {
-    html: `<div style="font-family:${rootFont.fontFamily};color:#111;background:${prefs.pageBackgroundColor || "#fff"};padding:16px;box-sizing:border-box;">${headerInline}${chartImgInline}${articleInline}${gridInline}${footerInline}</div>`,
+    html: `<div style="font-family:${rootFont.fontFamily};color:#111;background:${prefs.pageBackgroundColor || "#fff"};padding:${padPx}px;box-sizing:border-box;min-height:100%;">${headerInline}${bodyInline}${footerInline}</div>`,
     dir,
     lang,
   };

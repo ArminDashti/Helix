@@ -52,7 +52,7 @@ SAMPLE_ROWS_TOOL: dict[str, Any] = {
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "Row count 1–5 (default 5)",
+                    "description": "Row count 1-5 (default 5)",
                 },
             },
             "required": ["table"],
@@ -179,8 +179,9 @@ def sample_rows(table: str, limit: int = 5) -> dict[str, Any]:
 def researcher_sql_dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> str:
     """Run one researcher warehouse tool and return JSON for the LLM tool result."""
     tool = str(name or "").strip()
-    if tool == "execute_select":
-        return _dispatch_tool(tool, args, ctx)
+    if tool in ("execute_select", "search_web"):
+        payload, _done = _dispatch_tool(tool, args, ctx)
+        return payload
     if tool == "describe_table":
         try:
             table = str(args.get("table") or "").strip()
