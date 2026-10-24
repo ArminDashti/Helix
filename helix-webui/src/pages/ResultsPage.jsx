@@ -18,7 +18,7 @@ import {
 } from "../api/client.js";
 import DataGrid from "../components/DataGrid.jsx";
 import IconButton from "../components/IconButton.jsx";
-import PageHeader from "../components/PageHeader.jsx";
+import PageHeader, { PageBackButton } from "../components/PageHeader.jsx";
 import ResultShareMenu from "../components/ResultShareMenu.jsx";
 import { useI18n } from "../context/I18nContext.jsx";
 import { useLiveSync } from "../context/LiveSyncContext.jsx";
